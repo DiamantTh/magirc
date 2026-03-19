@@ -83,13 +83,36 @@ class Admin {
         if (!isset($username) || !isset($password)) {
             return false;
         }
-        if ($this->db->selectOne('magirc_admin', array('username' => trim($username), 'password' => md5(trim($password))))) {
-            $_SESSION['username'] = $_POST['username'];
-            $_SESSION["ipaddr"] = $_SERVER["REMOTE_ADDR"];
-            return true;
-        } else {
+        $username = trim($username);
+        $password = trim($password);
+
+        $admin = $this->db->selectOne('magirc_admin', array('username' => $username));
+        if (!$admin) {
             return false;
         }
+
+        $stored_hash = $admin['password'];
+        $verified = false;
+
+        // Support legacy MD5 hashes for seamless migration to bcrypt
+        if (strlen($stored_hash) === 32 && ctype_xdigit($stored_hash) && $stored_hash[0] !== '$') {
+            if (hash_equals($stored_hash, md5($password))) {
+                $verified = true;
+                // Upgrade to bcrypt on successful login
+                $new_hash = password_hash($password, PASSWORD_BCRYPT);
+                $this->db->update('magirc_admin', array('password' => $new_hash), array('username' => $username));
+            }
+        } else {
+            $verified = password_verify($password, $stored_hash);
+        }
+
+        if ($verified) {
+            session_regenerate_id(true);
+            $_SESSION['username'] = $username;
+            $_SESSION['ipaddr'] = $_SERVER['REMOTE_ADDR'];
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -106,6 +129,29 @@ class Admin {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Returns a CSRF token for the current session, generating one if needed
+     * @return string CSRF token
+     */
+    function getCsrfToken() {
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
+        return $_SESSION['csrf_token'];
+    }
+
+    /**
+     * Validates the given CSRF token against the session token
+     * @param string $token Token to validate
+     * @return boolean true: valid, false: invalid
+     */
+    function validateCsrfToken($token) {
+        if (empty($token) || empty($_SESSION['csrf_token'])) {
+            return false;
+        }
+        return hash_equals($_SESSION['csrf_token'], $token);
     }
 
     /**

@@ -7,6 +7,7 @@
 
     <div class="halfleft">
         <form id="logout" method="post" action="index.php/logout">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
             <h1>Welcome, {{ username }}</h1>
             <button type="submit" name="logout">Logout</button>
         </form>

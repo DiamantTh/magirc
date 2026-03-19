@@ -26,6 +26,8 @@ if (!file_exists('../conf/magirc.cfg.php'))
 if (!is_writable('../tmp/'))
     die('ERROR: Unable to write temporary files. Please run Setup.');
 
+ini_set('session.cookie_httponly', 1);
+ini_set('session.use_only_cookies', 1);
 session_start();
 
 include_once(__DIR__.'/../lib/magirc/version.inc.php');
@@ -66,6 +68,9 @@ $admin->slim->post('/ajaxlogin', function($req, $res, $args) use ($admin) {
     return $res->withHeader('Content-Type', 'application/json');
 });
 $admin->slim->post('/logout', function($req, $res, $args) use ($admin) {
+    if (!$admin->validateCsrfToken(isset($_POST['_csrf']) ? $_POST['_csrf'] : null)) {
+        return $res->withStatus(403)->write('HTTP 403 Forbidden');
+    }
     // Unset session variables
     if (isset($_SESSION["username"]))
         unset($_SESSION["username"]);
@@ -92,7 +97,8 @@ $admin->slim->get('/[overview]', function($req, $res, $args) use ($admin) {
             'section' => 'overview',
             'setup' => file_exists('../setup/'),
             'version' => array('php' => phpversion(), 'slim' => Slim\App::VERSION),
-            'username' => $_SESSION['username']
+            'username' => $_SESSION['username'],
+            'csrf_token' => $admin->getCsrfToken()
         ]);
     }
 });
@@ -102,7 +108,8 @@ $admin->slim->get('/configuration/welcome', function($req, $res, $args) use ($ad
     }
     $this->view->render($res, 'configuration_welcome.twig', [
         'cfg' => $admin->cfg->config,
-        'content' => $admin->getContent('welcome')
+        'content' => $admin->getContent('welcome'),
+        'csrf_token' => $admin->getCsrfToken()
     ]);
 });
 $admin->slim->get('/configuration/interface', function($req, $res, $args) use ($admin) {
@@ -123,6 +130,7 @@ $admin->slim->get('/configuration/interface', function($req, $res, $args) use ($
         'locales' => $locales,
         'themes' => $themes,
         'timezones' => DateTimeZone::listIdentifiers(),
+        'csrf_token' => $admin->getCsrfToken()
     ]);
 });
 $admin->slim->get('/configuration/network', function($req, $res, $args) use ($admin) {
@@ -139,7 +147,8 @@ $admin->slim->get('/configuration/network', function($req, $res, $args) use ($ad
     }
     $this->view->render($res, 'configuration_network.twig', [
         'cfg' => $admin->cfg->config,
-        'ircds' => $ircds
+        'ircds' => $ircds,
+        'csrf_token' => $admin->getCsrfToken()
     ]);
 });
 $admin->slim->get('/configuration/service/{service}', function($req, $res, $args) use ($admin) {
@@ -168,14 +177,19 @@ $admin->slim->get('/configuration/service/{service}', function($req, $res, $args
         'db_config_file' => $db_config_file,
         'writable' => is_writable($db_config_file),
         'db' => $db,
-        'service' => $args['service']
+        'service' => $args['service'],
+        'csrf_token' => $admin->getCsrfToken()
     ]);
 });
 $admin->slim->post('/content', function($req, $res, $args) use ($admin) {
     if (!$admin->sessionStatus()) {
         return $res->withStatus(403)->write('HTTP 403 Access Denied');
     }
+    if (!$admin->validateCsrfToken(isset($_POST['_csrf']) ? $_POST['_csrf'] : null)) {
+        return $res->withStatus(403)->write('HTTP 403 Forbidden');
+    }
     foreach ($_POST as $key => $val) {
+        if ($key === '_csrf') continue;
         $admin->saveContent($key, $val);
     }
     echo json_encode(true);
@@ -185,7 +199,11 @@ $admin->slim->post('/configuration', function($req, $res, $args) use ($admin) {
     if (!$admin->sessionStatus()) {
         return $res->withStatus(403)->write('HTTP 403 Access Denied');
     }
+    if (!$admin->validateCsrfToken(isset($_POST['_csrf']) ? $_POST['_csrf'] : null)) {
+        return $res->withStatus(403)->write('HTTP 403 Forbidden');
+    }
     foreach ($_POST as $key => $val) {
+        if ($key === '_csrf') continue;
         if ($key == 'base_url') {
             $val = (substr($val, -1) == "/") ? substr($val, 0, -1) : $val;
         }
@@ -197,6 +215,9 @@ $admin->slim->post('/configuration', function($req, $res, $args) use ($admin) {
 $admin->slim->post('/configuration/{service}/database', function($req, $res, $args) use ($admin) {
     if (!$admin->sessionStatus()) {
         return $res->withStatus(403)->write('HTTP 403 Access Denied');
+    }
+    if (!$admin->validateCsrfToken(isset($_POST['_csrf']) ? $_POST['_csrf'] : null)) {
+        return $res->withStatus(403)->write('HTTP 403 Forbidden');
     }
     $db_config_file = __DIR__."/../conf/{$args['service']}.cfg.php";
     $db = array();

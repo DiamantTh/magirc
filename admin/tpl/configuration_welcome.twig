@@ -1,6 +1,7 @@
 <h1>Welcome message</h1>
 <p>You can welcome your users, describe your network, and put whatever information you want in here.</p>
 <form id="welcome-form">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
     <input type="radio" name="welcome_mode" value="statuspage"{% if cfg.welcome_mode == 'statuspage' %} checked="checked"{% endif %} /> Show the welcome message on the live network status page<br />
     <input type="radio" name="welcome_mode" value="ownpage"{% if cfg.welcome_mode == 'ownpage' %} checked="checked"{% endif %} /> Show the welcome message as a separate tab in the network section<br />
     <input type="radio" name="welcome_mode" value="disabled"{% if cfg.welcome_mode == 'disabled' %} checked="checked"{% endif %} /> Disable the welcome message<br />
@@ -24,7 +25,7 @@ $(document).ready(function() {
         $("#content-form").ajaxSubmit({
             url: 'index.php/content',
             type: 'post',
-            data: { welcome: CKEDITOR.instances['content-form'].getData() },
+            data: { welcome: CKEDITOR.instances['content-form'].getData(), _csrf: '{{ csrf_token }}' },
             success: function(data) {
                 if (!data) success = false;
             }
