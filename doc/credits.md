@@ -14,4 +14,4 @@ MagIRC uses the following open source products developed by third parties:
 * [DataTables](http://www.datatables.net)
 * [Highcharts and Highstock](http://www.highcharts.com)
 * [jQuery dateFormat](https://github.com/phstc/jquery-dateFormat)
-* [CKEditor](http://www.ckeditor.com)
+* [Tiptap](https://tiptap.dev/) (MIT licensed editor core and StarterKit)

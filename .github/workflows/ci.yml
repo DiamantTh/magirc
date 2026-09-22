@@ -1,0 +1,66 @@
+name: MagIRC CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: PHP ${{ matrix.php }} / MariaDB
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.4', '8.5']
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: magirc_test
+          MARIADB_USER: magirc
+          MARIADB_PASSWORD: magirc
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      MAGIRC_TEST_DSN: mysql:host=127.0.0.1;port=3306;dbname=magirc_test;charset=utf8mb4
+      MAGIRC_TEST_DB_USER: magirc
+      MAGIRC_TEST_DB_PASSWORD: magirc
+      MAGIRC_TEST_DB_PORT: 3306
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathai/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, gettext, mbstring, pdo_mysql
+          coverage: none
+          tools: composer:v2
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile --ignore-scripts
+      - name: Build editor bundle
+        run: yarn build:editor
+      - name: Build production runtime assets
+        run: yarn build:runtime
+      - name: Run PHPUnit, security and database integration tests
+        run: composer test
+      - name: Run static checks
+        run: composer cs && composer analyse && composer rector:check
+      - name: Composer audit
+        run: composer audit
+      - name: Frontend bundle check
+        run: yarn test:editor && yarn test:runtime-assets
+      - name: Installation entrypoint smoke test
+        run: composer test:installation
