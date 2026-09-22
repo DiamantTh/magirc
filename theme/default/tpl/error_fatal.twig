@@ -1,6 +1,6 @@
 {% extends "layout.twig" %}
 
-{% block title %}{{ parent() }}{% trans "Error" %}{% endblock %}
+{% block title %}{{ parent() }}{{ 'Error'|trans }}{% endblock %}
 
 {% block css %}<link href="theme/{{ cfg.theme }}/css/bsod.css" rel="stylesheet" type="text/css" />{% endblock %}
 
@@ -13,7 +13,7 @@
             {{ key }}: {{ item }}<br />
         {% endfor %}
     {% else %}
-        {% trans "This should not have happened. Please contact the Administrator." %}<br />
-        {% trans "If you are the Administrator, please enable Debug mode to see more information and submit it to the MagIRC developers. Thank you!" %}
+        {{ 'This should not have happened. Please contact the Administrator.'|trans }}<br />
+        {{ 'If you are the Administrator, please enable Debug mode to see more information and submit it to the MagIRC developers. Thank you!'|trans }}
     {% endif %}
 {% endblock %}

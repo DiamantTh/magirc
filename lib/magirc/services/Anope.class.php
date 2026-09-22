@@ -1,37 +1,31 @@
 <?php
 
+require_once(__DIR__ . '/../ConfigStore.class.php');
+
+use MagIRC\Cache\StatisticsCache;
+use MagIRC\Cache\StatisticsCacheFactory;
+use MagIRC\Logging\LoggerFactory;
+use Psr\Log\LoggerInterface;
+
 class AnopeDB extends DB {
-    private static $instance = null;
+    private static $instance;
 
     public static function getInstance() {
-        if (is_null(self::$instance) === true) {
-            $db = null;
-            $error = false;
-            $config_file = PATH_ROOT . 'conf/anope.cfg.php';
-            if (file_exists($config_file)) {
-                include($config_file);
-            } else {
-                $error = true;
-            }
-            if ($error || !is_array($db)) {
+        if (is_null(self::$instance)) {
+            try {
+                $db = MagircConfigStore::load('anope', PATH_ROOT . 'conf');
+            } catch (Exception $exception) {
+                LoggerFactory::get()->error('Anope database configuration could not be loaded.', ['exception_class' => $exception::class]);
                 die('<strong>MagIRC</strong> is not properly configured<br />Please configure the Anope database in the <a href="admin/">Admin Panel</a>');
             }
-            $dsn = "mysql:dbname={$db['database']};host={$db['hostname']}";
-            $args = array();
-            if (isset($db['ssl']) && $db['ssl_key']) {
-                $args[PDO::MYSQL_ATTR_SSL_KEY] = $db['ssl_key'];
-            }
-            if (isset($db['ssl']) && $db['ssl_cert']) {
-                $args[PDO::MYSQL_ATTR_SSL_CERT] = $db['ssl_cert'];
-            }
-            if (isset($db['ssl']) && $db['ssl_ca']) {
-                $args[PDO::MYSQL_ATTR_SSL_CA] = $db['ssl_ca'];
-            }
+            $dsn = MagircConfigStore::dsn($db);
+            $args = MagircConfigStore::pdoOptions($db);
             self::$instance = new DB($dsn, $db['username'], $db['password'], $args);
-            $prefix = isset($db['prefix']) ? $db['prefix'] : null;
+            $prefix = $db['prefix'] ?? null;
             self::setTableNames($prefix);
             if (self::$instance->error) {
-                die('Error opening the Anope database<br />' . self::$instance->error);
+                LoggerFactory::get()->error('Anope database is unavailable.');
+                die('Service temporarily unavailable.');
             }
         }
         return self::$instance;
@@ -53,8 +47,11 @@ class AnopeDB extends DB {
 class Anope implements Service {
     private $db;
     private $cfg;
+    private readonly StatisticsCache $statisticsCache;
+    private readonly LoggerInterface $logger;
 
-    public function __construct() {
+    public function __construct(?LoggerInterface $logger = null, ?StatisticsCache $statisticsCache = null) {
+        $this->logger = $logger ?? LoggerFactory::get();
         $ircd_file = PATH_ROOT . "lib/magirc/ircds/" . IRCD . ".inc.php";
         if (file_exists($ircd_file)) {
             require_once($ircd_file);
@@ -63,6 +60,13 @@ class Anope implements Service {
         }
         $this->db = AnopeDB::getInstance();
         $this->cfg = new Config();
+        $dbConfig = [];
+        try {
+            $dbConfig = MagircConfigStore::load('anope', PATH_ROOT . 'conf');
+        } catch (\Throwable $exception) {
+            $this->logger->warning('Anope cache configuration unavailable.', ['exception_class' => $exception::class]);
+        }
+        $this->statisticsCache = $statisticsCache ?? StatisticsCacheFactory::create($dbConfig + (array) $this->cfg->config, 'anope', $this->logger);
         require_once(__DIR__.'/../objects/anope/Server.class.php');
         require_once(__DIR__.'/../objects/anope/Channel.class.php');
         require_once(__DIR__.'/../objects/anope/User.class.php');
@@ -73,17 +77,19 @@ class Anope implements Service {
      * @return array of arrays (int val, int time)
      */
     public function getCurrentStatus() {
+        return $this->statisticsCache->remember('current_status', [], fn () => $this->getCurrentStatusUncached());
+    }
+
+    private function getCurrentStatusUncached() {
         $query = sprintf("SELECT * FROM `%s`", TBL_CURRENTUSAGE);
         $this->db->query($query, SQL_INIT, SQL_ASSOC);
         $result = $this->db->record;
-
-        $data = array(
-            'users' => array('val' => (int) $result['users'], 'time' => $result['datetime']),
-            'chans' => array('val' => (int) $result['channels'], 'time' => $result['datetime']),
-            'servers' => array('val' => (int) $result['servers'], 'time' => $result['datetime']),
-            'opers' => array('val' => (int) $result['operators'], 'time' => $result['datetime'])
-        );
-        return $data;
+        return [
+            'users' => ['val' => (int) $result['users'], 'time' => $result['datetime']],
+            'chans' => ['val' => (int) $result['channels'], 'time' => $result['datetime']],
+            'servers' => ['val' => (int) $result['servers'], 'time' => $result['datetime']],
+            'opers' => ['val' => (int) $result['operators'], 'time' => $result['datetime']]
+        ];
     }
 
     /**
@@ -91,13 +97,17 @@ class Anope implements Service {
      * @return array of arrays (int val, int time)
      */
     public function getMaxValues() {
+        return $this->statisticsCache->remember('max_values', [], fn () => $this->getMaxValuesUncached());
+    }
+
+    private function getMaxValuesUncached() {
         $this->db->query(sprintf("SELECT * FROM `%s`", TBL_MAXUSAGE), SQL_ALL, SQL_ASSOC);
-        $data = array();
+        $data = [];
         foreach ($this->db->record as $row) {
             if ($row['type'] == 'operators') {
                 $row['type'] = 'opers';
             }
-            $data[$row['type']] = array('val' => $row['count'], 'time' => $row['datetime']);
+            $data[$row['type']] = ['val' => $row['count'], 'time' => $row['datetime']];
         }
         return $data;
     }
@@ -109,6 +119,10 @@ class Anope implements Service {
      * @return int User count
      */
     public function getUserCount($mode = null, $target = null) {
+        return $this->statisticsCache->remember('user_count', ['mode' => $mode, 'target' => $target], fn () => $this->getUserCountUncached($mode, $target), false, $this->cacheScope($mode, $target));
+    }
+
+    private function getUserCountUncached($mode = null, $target = null) {
         $query = sprintf("SELECT COUNT(*) FROM `%s` AS u JOIN `%s` AS s ON s.id = u.servid", TBL_USER, TBL_SERVER);
         $where = null;
         if ($mode == 'channel' && $target) {
@@ -145,6 +159,10 @@ class Anope implements Service {
      * @return array Data
      */
     public function getClientStats($mode = null, $target = null) {
+        return $this->statisticsCache->remember('client_stats', ['mode' => $mode, 'target' => $target], fn () => $this->getClientStatsUncached($mode, $target), false, $this->cacheScope($mode, $target));
+    }
+
+    private function getClientStatsUncached($mode = null, $target = null) {
         $query = sprintf("SELECT u.version AS client, COUNT(*) AS count
             FROM `%s` AS u
             JOIN `%s` AS s ON s.id = u.servid",
@@ -180,6 +198,10 @@ class Anope implements Service {
      * @return array Data
      */
     public function getCountryStats($mode = null, $target = null) {
+        return $this->statisticsCache->remember('country_stats', ['mode' => $mode, 'target' => $target], fn () => $this->getCountryStatsUncached($mode, $target), false, $this->cacheScope($mode, $target));
+    }
+
+    private function getCountryStatsUncached($mode = null, $target = null) {
         $query = sprintf("SELECT u.geocountry AS country, u.geocode AS country_code, COUNT(*) AS count
             FROM `%s` AS u
             JOIN `%s` AS s ON s.id = u.servid",
@@ -210,6 +232,12 @@ class Anope implements Service {
         return $ps->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    private function cacheScope($mode, $target): string
+    {
+        $scope = $mode && $target ? 'restricted:' . hash('sha256', (string) $target) : 'public';
+        return $scope . ':hide-ulined=' . (int) (bool) $this->cfg->hide_ulined . ':protection=' . (Protocol::services_protection_mode ?? '');
+    }
+
     /**
      * Get GeoIP country statistics for Highmaps
      * @param string $mode Mode ('server', 'channel', null: global)
@@ -218,11 +246,11 @@ class Anope implements Service {
      * @todo finish implementation
      */
     public function getCountryMap($mode = null, $target = null){
-        $result = array();
+        $result = [];
         $data = $this->getCountryStats($mode, $target);
         foreach ($data as $item){
             if ($item['country_code']){
-                $result[] = array('code' => $item['country_code'], 'z' => (int) $item['count']);
+                $result[] = ['code' => $item['country_code'], 'z' => (int) $item['count']];
             }
         }
         return $result;
@@ -235,26 +263,26 @@ class Anope implements Service {
      * @return array of arrays (string 'name', int 'count', double 'y')
      */
     public function makeCountryPieData($result, $sum) {
-        $data = array();
+        $data = [];
         $unknown = 0;
         $other = 0;
         foreach ($result as $val) {
             $percent = round($val["count"] / $sum * 100, 2);
-            if (in_array ($val['country'], array("Unknown", "localhost"))) {
+            if (in_array ($val['country'], ["Unknown", "localhost"])) {
                 $unknown += $val["count"];
-            } elseif (in_array ($val['country_code'], array(null, "", "??"))) {
+            } elseif (in_array ($val['country_code'], [null, "", "??"])) {
                 $unknown += $val["count"];
             } elseif ($percent < 2) {
                 $other += $val["count"];
             } else {
-                $data[] = array('name' => $val['country'] ? $val['country'] : $val['country_code'], 'count' => $val["count"], 'y' => $percent);
+                $data[] = ['name' => $val['country'] ?: $val['country_code'], 'count' => $val["count"], 'y' => $percent];
             }
         }
         if ($unknown > 0) {
-            $data[] = array('name' => gettext('Unknown'), 'count' => $unknown, 'y' => round($unknown / $sum * 100, 2));
+            $data[] = ['name' => gettext('Unknown'), 'count' => $unknown, 'y' => round($unknown / $sum * 100, 2)];
         }
         if ($other > 0) {
-            $data[] = array('name' => gettext('Other'), 'count' => $other, 'y' => round($other / $sum * 100, 2));
+            $data[] = ['name' => gettext('Other'), 'count' => $other, 'y' => round($other / $sum * 100, 2)];
         }
         return $data;
     }
@@ -266,23 +294,23 @@ class Anope implements Service {
      * @return array (clients => (name, count, y), versions (name, version, cat, count, y))
      */
     public function makeClientPieData($result, $sum) {
-        $clients = array();
+        $clients = [];
         foreach ($result as $client) {
             // Determine client name and version
-            $matches = array();
-            preg_match('/^(.*?)\s*(\S*\d\S*)/', str_replace(array('(',')','[',']','{','}'), '', $client['client']), $matches);
-            if (count($matches) == 3) {
+            $matches = [];
+            preg_match('/^(.*?)\s*(\S*\d\S*)/', str_replace(['(',')','[',']','{','}'], '', $client['client']), $matches);
+            if (count($matches) === 3) {
                 $name = $matches[1];
                 $version = $matches[2][0] == 'v' ? substr($matches[2], 1) : $matches[2];
             } else {
-                $name = $client['client'] ? $client['client'] : gettext('Unknown');
+                $name = $client['client'] ?: gettext('Unknown');
                 $version = '';
             }
             $name = trim($name);
             $version = trim($version);
             // Categorize the versions
             if (!array_key_exists($name, $clients)) {
-                $clients[$name] = array('count' => $client['count'], 'versions' => array());
+                $clients[$name] = ['count' => $client['count'], 'versions' => []];
             } else {
                 $clients[$name]['count'] += $client['count'];
             }
@@ -293,9 +321,7 @@ class Anope implements Service {
             }
         }
         // Sort by count descending
-        uasort($clients, function($a, $b) {
-            return $a['count'] < $b['count'];
-        });
+        uasort($clients, fn($a, $b) => $a['count'] < $b['count']);
         foreach ($clients as $key => $val) {
             arsort($clients[$key]['versions']);
             unset($val);
@@ -303,42 +329,42 @@ class Anope implements Service {
 
         // Prepare data for output
         $min_count = ceil($sum / 300);
-        $data = array('clients' => array(), 'versions' => array());
-        $other = array('count' => 0, 'versions' => array());
+        $data = ['clients' => [], 'versions' => []];
+        $other = ['count' => 0, 'versions' => []];
         $other_various = 0;
         foreach ($clients as $name => $client) {
             $percent = round($client['count'] / $sum * 100, 2);
-            if ($percent < 2 || $name == gettext('Unknown')) { // Too small or unknown
+            if ($percent < 2 || $name === gettext('Unknown')) { // Too small or unknown
                 $other['count'] += $client['count'];
                 foreach ($client['versions'] as $version => $count) {
                     if ($count < $min_count) {
                         $other_various += $count;
                     } else {
-                        $other['versions'][] = array('name' => $name, 'version' => $version, 'cat' => gettext('Other'), 'count' => (int) $count, 'y' => (double) round($count / $sum * 100, 2));
+                        $other['versions'][] = ['name' => $name, 'version' => $version, 'cat' => gettext('Other'), 'count' => (int) $count, 'y' => round($count / $sum * 100, 2)];
                     }
                 }
             } else {
                 $data_various = 0;
-                $data['clients'][] = array('name' => $name, 'count' => (int) $client['count'], 'y' => (double) $percent);
+                $data['clients'][] = ['name' => $name, 'count' => (int) $client['count'], 'y' => $percent];
                 foreach ($client['versions'] as $version => $count) {
                     if ($count < $min_count) {
                         $data_various += $count;
                     } else {
-                        $data['versions'][] = array('name' => $name, 'version' => $version, 'cat' => $name, 'count' => (int) $count, 'y' => (double) round($count / $sum * 100, 2));
+                        $data['versions'][] = ['name' => $name, 'version' => $version, 'cat' => $name, 'count' => (int) $count, 'y' => round($count / $sum * 100, 2)];
                     }
                 }
                 if ($data_various) {
-                    $data['versions'][] = array('name' => $name, 'version' => '('.gettext('various').')', 'cat' => $name, 'count' => (int) $data_various, 'y' => (double) round($data_various / $sum * 100, 2));
+                    $data['versions'][] = ['name' => $name, 'version' => '('.gettext('various').')', 'cat' => $name, 'count' => (int) $data_various, 'y' => round($data_various / $sum * 100, 2)];
                 }
             }
         }
         if ($other_various) {
-            $other['versions'][] = array('name' => gettext('Various'), 'version' => '', 'cat' => gettext('Other'), 'count' => (int) $other_various, 'y' => (double) round($other_various / $sum * 100, 2));;
+            $other['versions'][] = ['name' => gettext('Various'), 'version' => '', 'cat' => gettext('Other'), 'count' => (int) $other_various, 'y' => round($other_various / $sum * 100, 2)];
         }
         // Append other slices
         if ($other['count'] > 0) {
             $other['percent'] = round($other['count'] / $sum * 100, 2);
-            $data['clients'][] = array('name' => gettext('Other'), 'count' => (int) $other['count'], 'y' => (double) $other['percent']);
+            $data['clients'][] = ['name' => gettext('Other'), 'count' => (int) $other['count'], 'y' => (float) $other['percent']];
             $data['versions'] = array_merge($data['versions'], $other['versions']);
         }
         return $data;
@@ -349,7 +375,7 @@ class Anope implements Service {
      * @return array of arrays (int milliseconds, int value)
      */
     public function getUserHistory() {
-        return $this->getHistory('users');
+        return $this->statisticsCache->remember('history_users', [], fn () => $this->getHistory('users'), true);
     }
 
     /**
@@ -357,7 +383,7 @@ class Anope implements Service {
      * @return array of arrays (int milliseconds, int value)
      */
     public function getChannelHistory() {
-        return $this->getHistory('channels');
+        return $this->statisticsCache->remember('history_channels', [], fn () => $this->getHistory('channels'), true);
     }
 
     /**
@@ -365,7 +391,7 @@ class Anope implements Service {
      * @return array of arrays (int milliseconds, int value)
      */
     public function getServerHistory() {
-        return $this->getHistory('servers');
+        return $this->statisticsCache->remember('history_servers', [], fn () => $this->getHistory('servers'), true);
     }
 
     private function getHistory($value) {
@@ -373,9 +399,9 @@ class Anope implements Service {
         $ps = $this->db->prepare($query);
         $ps->execute();
         $rows = $ps->fetchAll(PDO::FETCH_ASSOC);
-        $data = array();
+        $data = [];
         foreach ($rows as $row) {
-            $data[] = array(strtotime($row['datetime']) * 1000, (int) $row[$value]);
+            $data[] = [strtotime($row['datetime']) * 1000, (int) $row[$value]];
         }
         return $data;
     }
@@ -413,7 +439,7 @@ class Anope implements Service {
      */
     public function getServer($server) {
         $query = sprintf("SELECT s.name AS server, online, comment AS description, link_time AS connect_time,
-            split_time, version, currentusers AS users, maxusers AS users_max, maxtime AS users_max_time,
+            split_time, version, currentusers AS users, m.maxusers AS users_max, m.maxtime AS users_max_time,
             (SELECT COUNT(*) FROM `%s` AS u WHERE u.oper = 'Y' AND u.servid = s.id) AS opers
             FROM `%s` AS s
             LEFT JOIN `%s` AS m ON m.name = s.name
@@ -493,15 +519,15 @@ class Anope implements Service {
         }
 
         $query = sprintf("SELECT SQL_CALC_FOUND_ROWS channel, (SELECT COUNT(*) FROM `%s` AS i WHERE c.chanid = i.chanid) AS users, topic, topicauthor AS topic_author,"
-                . " topictime AS topic_time, modes, maxusers AS users_max, maxtime AS users_max_time"
+                . " topictime AS topic_time, modes, m.maxusers AS users_max, m.maxtime AS users_max_time"
                 . " FROM `%s` AS c"
                 . " LEFT JOIN `%s` AS m ON m.name = c.channel"
                 . " WHERE %s",
                 TBL_ISON, TBL_CHAN, TBL_MAXUSERS, $where);
         if ($datatables) {
             $total = $this->db->datatablesTotal($query);
-            $filtering = $this->db->datatablesFiltering(array('channel', 'topic'));
-            $ordering = $this->db->datatablesOrdering();
+            $filtering = $this->db->datatablesFiltering(['channel', 'topic']);
+            $ordering = $this->db->datatablesOrdering(['channel' => 'channel', 'users' => 'users', 'topic' => 'topic', 'users_max' => 'users_max', 'modes' => 'modes']);
             $paging = $this->db->datatablesPaging();
             $query .= sprintf(" %s %s %s", $filtering ? "AND " . $filtering : "", $ordering, $paging);
         } else {
@@ -525,7 +551,7 @@ class Anope implements Service {
     public function getChannelBiggest($limit = 10) {
         $secret_mode = Protocol::chan_secret_mode;
         $query = sprintf("SELECT channel, (SELECT COUNT(*) FROM `%s` AS i WHERE c.chanid = i.chanid) AS users, topic, topicauthor AS topic_author,"
-                . " topictime AS topic_time, modes, maxusers AS users_max, maxtime AS users_max_time"
+                . " topictime AS topic_time, modes, m.maxusers AS users_max, m.maxtime AS users_max_time"
                 . " FROM `%s` AS c"
                 . " LEFT JOIN `%s` AS m ON m.name = c.channel"
                 . " WHERE 1 > 0",
@@ -534,7 +560,8 @@ class Anope implements Service {
             $query .= sprintf(" AND modes NOT LIKE BINARY '%%%s%%'", $secret_mode);
         }
         $hide_chans = explode(",", $this->cfg->hide_chans);
-        for ($i = 0; $i < count($hide_chans); $i++) {
+        $counter = count($hide_chans);
+        for ($i = 0; $i < $counter; $i++) {
             $query .= " AND LOWER(channel) NOT LIKE " . $this->db->escape(strtolower($hide_chans[$i]));
         }
         $query .= " ORDER BY users DESC LIMIT :limit";
@@ -564,7 +591,8 @@ class Anope implements Service {
             $query .= sprintf(" AND c.modes NOT LIKE BINARY '%%%s%%'", $private_mode);
         }
         $hide_chans = explode(",", $this->cfg->hide_chans);
-        for ($i = 0; $i < count($hide_chans); $i++) {
+        $counter = count($hide_chans);
+        for ($i = 0; $i < $counter; $i++) {
             $query .= " AND cs.chan NOT LIKE " . $this->db->escape(strtolower($hide_chans[$i]));
         }
         $query .= " ORDER BY cs.line DESC LIMIT :limit";
@@ -581,7 +609,7 @@ class Anope implements Service {
      */
     public function getChannel($chan) {
         $query = sprintf("SELECT channel, (SELECT COUNT(*) FROM `%s` AS i WHERE c.chanid = i.chanid) AS users, topic, topicauthor AS topic_author,
-            topictime AS topic_time, modes, maxusers AS users_max, maxtime AS users_max_time
+            topictime AS topic_time, modes, m.maxusers AS users_max, m.maxtime AS users_max_time
             FROM `%s` AS c
             LEFT JOIN `%s` AS m ON m.name = c.channel
             WHERE LOWER(channel) = LOWER(:chan)",
@@ -625,7 +653,7 @@ class Anope implements Service {
      * @return array Data
      */
     public function getChannelGlobalActivity($type, $datatables = false) {
-        $aaData = array();
+        $aaData = [];
         $secret_mode = Protocol::chan_secret_mode;
         $private_mode = Protocol::chan_private_mode;
 
@@ -651,9 +679,9 @@ class Anope implements Service {
             LEFT JOIN `%s` AS c ON LOWER(cs.chan) = LOWER(c.channel)
             WHERE cs.type = :type AND cs.nick = '' AND %s", TBL_CHANSTATS, TBL_CHAN, $where);
         if ($datatables) {
-            $total = $this->db->datatablesTotal($query, array(':type' => $type));
-            $filtering = $this->db->datatablesFiltering(array('cs.chan', 'c.topic'));
-            $ordering = $this->db->datatablesOrdering();
+            $total = $this->db->datatablesTotal($query, [':type' => $type]);
+            $filtering = $this->db->datatablesFiltering(['cs.chan', 'c.topic']);
+            $ordering = $this->db->datatablesOrdering(['name' => 'name', 'letters' => 'letters', 'words' => 'words', 'lines' => 'lines', 'actions' => 'actions', 'smileys' => 'smileys', 'kicks' => 'kicks', 'modes' => 'modes', 'topics' => 'topics']);
             $paging = $this->db->datatablesPaging();
             $query .= sprintf("%s %s %s", $filtering ? " AND " . $filtering : "", $ordering, $paging);
         }
@@ -681,16 +709,16 @@ class Anope implements Service {
      * @return User
      */
     public function getChannelActivity($chan, $type, $datatables = false) {
-        $aaData = array();
+        $aaData = [];
         $query = sprintf("SELECT SQL_CALC_FOUND_ROWS nick AS uname, letters, words, line AS 'lines', actions,"
                 . " (smileys_happy + smileys_sad + smileys_other) AS smileys, kicks, modes, topics"
                 . " FROM `%s` AS cs"
                 . " WHERE chan = :channel AND nick != '' AND type=:type AND letters > 0 ",
                 TBL_CHANSTATS);
         if ($datatables) {
-            $total = $this->db->datatablesTotal($query, array(':type' => $type, ':channel' => $chan));
-            $filtering = $this->db->datatablesFiltering(array('nick'));
-            $ordering = $this->db->datatablesOrdering();
+            $total = $this->db->datatablesTotal($query, [':type' => $type, ':channel' => $chan]);
+            $filtering = $this->db->datatablesFiltering(['nick']);
+            $ordering = $this->db->datatablesOrdering(['uname' => 'uname', 'letters' => 'letters', 'words' => 'words', 'lines' => 'lines', 'actions' => 'actions', 'smileys' => 'smileys', 'kicks' => 'kicks', 'modes' => 'modes', 'topics' => 'topics']);
             $paging = $this->db->datatablesPaging();
             $query .= sprintf("%s %s %s", $filtering ? " AND " . $filtering : "", $ordering, $paging);
         }
@@ -753,9 +781,8 @@ class Anope implements Service {
                 $result[$key] = (int) $val;
             }
             return $result;
-        } else {
-            return null;
         }
+        return null;
     }
 
     /**
@@ -764,9 +791,10 @@ class Anope implements Service {
      * @return int code (200: OK, 404: not existing, 403: denied)
      */
     public function checkChannel($chan) {
-        $noshow = array();
+        $noshow = [];
         $no = explode(",", $this->cfg->hide_chans);
-        for ($i = 0; $i < count($no); $i++) {
+        $counter = count($no);
+        for ($i = 0; $i < $counter; $i++) {
             $noshow[$i] = strtolower($no[$i]);
         }
         if (in_array(strtolower($chan), $noshow)) {
@@ -785,15 +813,15 @@ class Anope implements Service {
             return 404;
         }
 
-        list($modes) = explode(' ', $data['modes']);
+        [$modes] = explode(' ', $data['modes']);
 
-        if ($this->cfg->block_schans && Protocol::chan_secret_mode && strpos($modes, Protocol::chan_secret_mode) !== false) {
+        if ($this->cfg->block_schans && Protocol::chan_secret_mode && str_contains($modes, Protocol::chan_secret_mode)) {
             return 403;
         }
-        if ($this->cfg->block_pchans && Protocol::chan_private_mode && strpos($modes, Protocol::chan_private_mode) !== false) {
+        if ($this->cfg->block_pchans && Protocol::chan_private_mode && str_contains($modes, Protocol::chan_private_mode)) {
             return 403;
         }
-        if (strpos($modes, 'i') !== false || strpos($modes, 'k') !== false || strpos($modes, 'O') !== false) {
+        if (str_contains($modes, 'i') || str_contains($modes, 'k') || str_contains($modes, 'O')) {
             return 403;
         }
 
@@ -812,7 +840,7 @@ class Anope implements Service {
         $ps = $this->db->prepare($query);
         $ps->bindValue(':channel', $chan, PDO::PARAM_STR);
         $ps->execute();
-        return $ps->fetch(PDO::FETCH_COLUMN) ? true : false;
+        return (bool) $ps->fetch(PDO::FETCH_COLUMN);
     }
 
     /**
@@ -821,7 +849,7 @@ class Anope implements Service {
      * @return array of user stats
      */
     public function getUsersTop($limit = 10) {
-        $aaData = array();
+        $aaData = [];
         $query = sprintf("SELECT nick AS uname, line AS 'lines'"
                 . " FROM `%s` AS cs"
                 . " WHERE type = 'daily' AND chan = '' AND line > 0"
@@ -877,9 +905,8 @@ class Anope implements Service {
             $user->uname = $info['uname'];
             $user->aliases = $info['aliases'];
             return $user;
-        } else {
-            return null;
         }
+        return null;
     }
 
     /**
@@ -929,7 +956,7 @@ class Anope implements Service {
      * @return array
      */
     public function getUserGlobalActivity($type, $datatables = false) {
-        $aaData = array();
+        $aaData = [];
 
         $query = sprintf("SELECT SQL_CALC_FOUND_ROWS nick AS 'uname', letters, words, line AS 'lines',
             actions, (smileys_happy + smileys_sad + smileys_other) AS 'smileys', kicks, modes, topics
@@ -937,9 +964,9 @@ class Anope implements Service {
             WHERE type = :type AND letters > 0 and chan = ''",
                 TBL_CHANSTATS);
         if ($datatables) {
-            $total = $this->db->datatablesTotal($query, array(':type' => $type));
-            $filtering = $this->db->datatablesFiltering(array('nick'));
-            $ordering = $this->db->datatablesOrdering();
+            $total = $this->db->datatablesTotal($query, [':type' => $type]);
+            $filtering = $this->db->datatablesFiltering(['nick']);
+            $ordering = $this->db->datatablesOrdering(['uname' => 'uname', 'letters' => 'letters', 'words' => 'words', 'lines' => 'lines', 'actions' => 'actions', 'smileys' => 'smileys', 'kicks' => 'kicks', 'modes' => 'modes', 'topics' => 'topics']);
             $paging = $this->db->datatablesPaging();
             $query .= sprintf("%s %s %s", $filtering ? " AND " . $filtering : "", $ordering, $paging);
         }
@@ -1083,7 +1110,7 @@ class Anope implements Service {
         $ps = $this->db->prepare($query);
         $ps->bindValue(':user', $user, SQL_STR);
         $ps->execute();
-        return $ps->fetch(PDO::FETCH_COLUMN) ? true : false;
+        return (bool) $ps->fetch(PDO::FETCH_COLUMN);
     }
 
     /**
@@ -1103,7 +1130,7 @@ class Anope implements Service {
         $ps = $this->db->prepare($query);
         $ps->bindValue(':user', $user, PDO::PARAM_STR);
         $ps->execute();
-        return $ps->fetch(PDO::FETCH_COLUMN) ? true : false;
+        return (bool) $ps->fetch(PDO::FETCH_COLUMN);
     }
 
     /**
@@ -1116,11 +1143,11 @@ class Anope implements Service {
         $uname = ($mode == "stats") ? $user : $this->getUnameFromNick($user);
         $aliases = $this->getUnameAliases($uname);
         if (!$aliases) {
-            $aliases = array($uname ? $uname : $user);
+            $aliases = [$uname ?: $user];
         }
         $nick = ($mode == "stats") ? $aliases[0] : $user;
         array_shift($aliases);
-        return array('nick' => $nick, 'uname' => $uname, 'aliases' => $aliases);
+        return ['nick' => $nick, 'uname' => $uname, 'aliases' => $aliases];
     }
 
     /**

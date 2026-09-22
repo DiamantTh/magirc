@@ -14,9 +14,9 @@
 <base href="{{ constant('BASE_URL') }}" />
 <link rel="icon" href="theme/{{ cfg.theme}}/img/favicon.ico" type="image/x-icon">
 {% block css %}
-<link href="node_modules/jquery-ui-themes/themes/smoothness/jquery-ui.min.css" rel="stylesheet" type="text/css" />
-<link href="node_modules/datatables.net-jqui/css/dataTables.jqueryui.min.css" rel="stylesheet" type="text/css" />
-<link href="node_modules/flag-icon-css/css/flag-icon.min.css" rel="stylesheet" type="text/css" />
+<link href="assets/vendor/jquery-ui/jquery-ui.min.css" rel="stylesheet" type="text/css" />
+<link href="assets/vendor/datatables/dataTables.jqueryui.min.css" rel="stylesheet" type="text/css" />
+<link href="assets/vendor/flag-icon/flag-icon.min.css" rel="stylesheet" type="text/css" />
 <link href="theme/{{ cfg.theme }}/css/font.css" rel="stylesheet" type="text/css" />
 <link href="theme/{{ cfg.theme }}/css/styles.css" rel="stylesheet" type="text/css" />
 {% endblock %}
@@ -27,13 +27,13 @@
     <a href="./"><img src="theme/{{ cfg.theme }}/img/magirc.png" alt="MagIRC" title="" id="logo" /></a>
     <div id="menu">
         <ul>
-            <li><a href="{% if not cfg.rewrite_enable %}index.php/{% endif %}network"{% if section == 'network' %} class="active"{% endif %}><span>&nbsp;{% trans "Network" %}</span></a></li>
-            <li><a href="{% if not cfg.rewrite_enable %}index.php/{% endif %}server"{% if section == 'server' %} class="active"{% endif %}><span>&nbsp;{% trans "Servers" %}</span></a></li>
-            <li><a href="{% if not cfg.rewrite_enable %}index.php/{% endif %}channel"{% if section == 'channel' %} class="active"{% endif %}><span>&nbsp;{% trans "Channels" %}</span></a></li>
-            <li><a href="{% if not cfg.rewrite_enable %}index.php/{% endif %}user"{% if section == 'user' %} class="active"{% endif %}><span>&nbsp;{% trans "Users" %}</span></a></li>
+            <li><a href="{% if not cfg.rewrite_enable %}index.php/{% endif %}network"{% if section == 'network' %} class="active"{% endif %}><span>&nbsp;{{ 'Network'|trans }}</span></a></li>
+            <li><a href="{% if not cfg.rewrite_enable %}index.php/{% endif %}server"{% if section == 'server' %} class="active"{% endif %}><span>&nbsp;{{ 'Servers'|trans }}</span></a></li>
+            <li><a href="{% if not cfg.rewrite_enable %}index.php/{% endif %}channel"{% if section == 'channel' %} class="active"{% endif %}><span>&nbsp;{{ 'Channels'|trans }}</span></a></li>
+            <li><a href="{% if not cfg.rewrite_enable %}index.php/{% endif %}user"{% if section == 'user' %} class="active"{% endif %}><span>&nbsp;{{ 'Users'|trans }}</span></a></li>
         </ul>
     </div>
-    <div id="loading"><img src="theme/{{ cfg.theme }}/img/loading.gif" alt="{% trans "Loading" %}..." /></div>
+    <div id="loading"><img src="theme/{{ cfg.theme }}/img/loading.gif" alt="{{ 'Loading'|trans }}..." /></div>
 </div>
 <div id="main">
     {% block content %}[content placeholder]{% endblock %}
@@ -61,7 +61,7 @@
             <td style="text-align:left;">
                 <div id="selectlocale">
                     <form method="get" action="./">
-                    {% trans "Language" %}: <select name="locale" id="locale" autocomplete="off">
+                    {{ 'Language'|trans }}: <select name="locale" id="locale" autocomplete="off">
                     {% for locale,language in locales %}
                         <option value="{{ locale }}"{% if constant('LOCALE') == locale %} selected="selected"{% endif %}>{{ language }}</option>
                     {% endfor %}
@@ -87,20 +87,20 @@
     </table>
 </div>
 <ul id="chanmenu" style="display:none;">
-    {% if cfg.net_roundrobin %}<li data-action="irc"><a href="#"><img src="theme/{{ cfg.theme }}/img/icons/link.png" alt="" title="{% trans "Standard connection" %}" style="vertical-align:middle;" /> {% trans "IRC standard connection" %}</a></li>{% endif %}
-    {% if cfg.net_roundrobin and cfg.net_port_ssl %}<li data-action="ircs"><a href="#"><img src="theme/{{ cfg.theme }}/img/icons/ssl.png" alt="" title="{% trans "Secure connection" %}" style="vertical-align:middle;" /> {% trans "IRC secure connection" %}</a></li>{% endif %}
-    {% if cfg.service_webchat %}<li data-action="webchat{% if not cfg.service_webchat_urlencode %}2{% endif %}"><a href="#"><img src="theme/{{ cfg.theme }}/img/icons/webchat.png" alt="" title="{% trans "Webchat" %}" style="vertical-align:middle;" /> {% trans "Webchat" %}</a></li>{% endif %}
+    {% if cfg.net_roundrobin %}<li data-action="irc"><a href="#"><img src="theme/{{ cfg.theme }}/img/icons/link.png" alt="" title="{{ 'Standard connection'|trans }}" style="vertical-align:middle;" /> {{ 'IRC standard connection'|trans }}</a></li>{% endif %}
+    {% if cfg.net_roundrobin and cfg.net_port_ssl %}<li data-action="ircs"><a href="#"><img src="theme/{{ cfg.theme }}/img/icons/ssl.png" alt="" title="{{ 'Secure connection'|trans }}" style="vertical-align:middle;" /> {{ 'IRC secure connection'|trans }}</a></li>{% endif %}
+    {% if cfg.service_webchat %}<li data-action="webchat{% if not cfg.service_webchat_urlencode %}2{% endif %}"><a href="#"><img src="theme/{{ cfg.theme }}/img/icons/webchat.png" alt="" title="{{ 'Webchat'|trans }}" style="vertical-align:middle;" /> {{ 'Webchat'|trans }}</a></li>{% endif %}
     {% if cfg.net_roundrobin and cfg.service_mibbit %}<li data-action="mibbit"><a href="#"><img src="theme/{{ cfg.theme }}/img/icons/mibbit.png" alt="" title="Mibbit" style="vertical-align:middle;" /> Mibbit</a></li>{% endif %}
 </ul>
 {% endblock %}
 {% block js %}
-<script type="text/javascript" src="node_modules/jquery/dist/jquery.min.js"></script>
-<script type="text/javascript" src="node_modules/jquery-ui-dist/jquery-ui.min.js"></script>
-<script type="text/javascript" src="node_modules/datatables.net/js/jquery.dataTables.min.js"></script>
-<script type="text/javascript" src="node_modules/datatables.net-jqui/js/dataTables.jqueryui.min.js"></script>
-<script type="text/javascript" src="node_modules/highcharts/highstock.js"></script>
-<script type="text/javascript" src="node_modules/js-cookie/src/js.cookie.js"></script>
-<script type="text/javascript" src="node_modules/moment/min/moment-with-locales.min.js"></script>
+<script type="text/javascript" src="assets/vendor/jquery/jquery.min.js"></script>
+<script type="text/javascript" src="assets/vendor/jquery-ui/jquery-ui.min.js"></script>
+<script type="text/javascript" src="assets/vendor/datatables/jquery.dataTables.min.js"></script>
+<script type="text/javascript" src="assets/vendor/datatables/dataTables.jqueryui.min.js"></script>
+<script type="text/javascript" src="assets/vendor/highcharts/highstock.js"></script>
+<script type="text/javascript" src="assets/vendor/js-cookie/js.cookie.js"></script>
+<script type="text/javascript" src="assets/vendor/moment/moment-with-locales.min.js"></script>
 <script type="text/javascript">
 moment.locale('{{ constant('LANG') }}');
 var url_base = '{{ constant('BASE_URL') }}{% if not cfg.rewrite_enable %}index.php/{% endif %}';
@@ -111,80 +111,80 @@ var net_port_ssl = '{{ cfg.net_port_ssl }}';
 var service_webchat = '{{ cfg.service_webchat }}';
 var service_mibbit = '{{ cfg.service_mibbit }}';
 var stats_server = '{{ cfg.service }}';
-var format_datetime = '{% trans "YYYY-MM-DD hh:mm:ss" %}';
-var format_datetime_charts = '{% trans "%Y-%m-%d %H:%M:%S" %}';
+var format_datetime = '{{ 'YYYY-MM-DD hh:mm:ss'|trans }}';
+var format_datetime_charts = '{{ '%Y-%m-%d %H:%M:%S'|trans }}';
 var refresh_interval = {{ cfg.live_interval }} * 1000;
 var mLang = {
-    "Unknown": "{% trans "Unknown" %}",
-    "AwayAs": "{% trans "Away as" %}",
-    "OnlineAs": "{% trans "Online as" %}",
-    "Online": "{% trans "Online" %}",
-    "Offline": "{% trans "Offline" %}",
-    "Bot": "{% trans "Bot" %}",
-    "Service": "{% trans "Service" %}",
-    "Helper": "{% trans "Available for help" %}",
-    "Join": "{% trans "join" %}",
-    "Days": "{% trans "days" %}",
-    "Hours": "{% trans "hours" %}",
-    "Minutes": "{% trans "minutes" %}",
-    "zoom_All": "{% trans "All" %}",
-    "zoom_1d": "{% trans "1d" %}",
-    "zoom_1w": "{% trans "1w" %}",
-    "zoom_1m": "{% trans "1m" %}",
-    "zoom_3m": "{% trans "3m" %}",
-    "zoom_6m": "{% trans "6m" %}",
-    "zoom_1y": "{% trans "1y" %}",
-    "LoadError": "{% trans "Unable to load contents" %}",
-    "Message": "{% trans "Message" %}",
-    "ConnectedSince": "{% trans "Connected since" %}",
-    "LastQuit": "{% trans "Last quit" %}",
-    "UsersOnline": "{% trans "Users online" %}",
-    "ServersOnline": "{% trans "Servers online" %}",
-    "Servers": "{% trans "Servers" %}",
-    "Channels": "{% trans "Channels" %}",
-    "Users": "{% trans "Users" %}",
-    "Operators": "{% trans "Operators" %}",
-    "Total": "{% trans "Total" %}",
-    "Today": "{% trans "Today" %}",
-    "ThisWeek": "{% trans "This Week" %}",
-    "ThisMonth": "{% trans "This Month" %}",
-    "Yes": "{% trans "Yes" %}",
-    "No": "{% trans "No" %}",
-    "Never": "{% trans "Never" %}",
-    "On": "{% trans "on" %}",
-    "NoMotd": "{% trans "MOTD not available for this server" %}",
-    "Failed": "{% trans "Failed" %}",
-    "Close": "{% trans "Close" %}",
-    "Status": "{% trans "Status" %}",
-    "CountryStatistics": "{% trans "Country Statistics" %}",
-    "ClientStatistics": "{% trans "Client Statistics" %}",
-    "None": "{% trans "none" %}",
-    "MibbitRelDay": "{% trans "Day" %}",
-    "MibbitRelWeek": "{% trans "Week" %}",
-    "MibbitRelMonth": "{% trans "Month" %}",
-    "MibbitRelYear": "{% trans "Year" %}",
+    "Unknown": "{{ 'Unknown'|trans }}",
+    "AwayAs": "{{ 'Away as'|trans }}",
+    "OnlineAs": "{{ 'Online as'|trans }}",
+    "Online": "{{ 'Online'|trans }}",
+    "Offline": "{{ 'Offline'|trans }}",
+    "Bot": "{{ 'Bot'|trans }}",
+    "Service": "{{ 'Service'|trans }}",
+    "Helper": "{{ 'Available for help'|trans }}",
+    "Join": "{{ 'join'|trans }}",
+    "Days": "{{ 'days'|trans }}",
+    "Hours": "{{ 'hours'|trans }}",
+    "Minutes": "{{ 'minutes'|trans }}",
+    "zoom_All": "{{ 'All'|trans }}",
+    "zoom_1d": "{{ '1d'|trans }}",
+    "zoom_1w": "{{ '1w'|trans }}",
+    "zoom_1m": "{{ '1m'|trans }}",
+    "zoom_3m": "{{ '3m'|trans }}",
+    "zoom_6m": "{{ '6m'|trans }}",
+    "zoom_1y": "{{ '1y'|trans }}",
+    "LoadError": "{{ 'Unable to load contents'|trans }}",
+    "Message": "{{ 'Message'|trans }}",
+    "ConnectedSince": "{{ 'Connected since'|trans }}",
+    "LastQuit": "{{ 'Last quit'|trans }}",
+    "UsersOnline": "{{ 'Users online'|trans }}",
+    "ServersOnline": "{{ 'Servers online'|trans }}",
+    "Servers": "{{ 'Servers'|trans }}",
+    "Channels": "{{ 'Channels'|trans }}",
+    "Users": "{{ 'Users'|trans }}",
+    "Operators": "{{ 'Operators'|trans }}",
+    "Total": "{{ 'Total'|trans }}",
+    "Today": "{{ 'Today'|trans }}",
+    "ThisWeek": "{{ 'This Week'|trans }}",
+    "ThisMonth": "{{ 'This Month'|trans }}",
+    "Yes": "{{ 'Yes'|trans }}",
+    "No": "{{ 'No'|trans }}",
+    "Never": "{{ 'Never'|trans }}",
+    "On": "{{ 'on'|trans }}",
+    "NoMotd": "{{ 'MOTD not available for this server'|trans }}",
+    "Failed": "{{ 'Failed'|trans }}",
+    "Close": "{{ 'Close'|trans }}",
+    "Status": "{{ 'Status'|trans }}",
+    "CountryStatistics": "{{ 'Country Statistics'|trans }}",
+    "ClientStatistics": "{{ 'Client Statistics'|trans }}",
+    "None": "{{ 'none'|trans }}",
+    "MibbitRelDay": "{{ 'Day'|trans }}",
+    "MibbitRelWeek": "{{ 'Week'|trans }}",
+    "MibbitRelMonth": "{{ 'Month'|trans }}",
+    "MibbitRelYear": "{{ 'Year'|trans }}",
     "DataTables": {
-        "processing": "{% trans "Processing..." %}",
-        "loadingRecords": "{% trans "Please wait - loading..." %}",
-        "lengthMenu": "{% trans "Show _MENU_ entries" %}",
-        "zeroRecords": "{% trans "No matching records found" %}",
-        "emptyTable": "{% trans "No data available in table" %}",
-        "info": "{% trans "Showing _START_ to _END_ of _TOTAL_ entries" %}",
-        "infoEmpty": "{% trans "Showing 0 to 0 of 0 entries" %}",
-        "infoFiltered": "{% trans "(filtered from _MAX_ total entries)" %}",
+        "processing": "{{ 'Processing...'|trans }}",
+        "loadingRecords": "{{ 'Please wait - loading...'|trans }}",
+        "lengthMenu": "{{ 'Show _MENU_ entries'|trans }}",
+        "zeroRecords": "{{ 'No matching records found'|trans }}",
+        "emptyTable": "{{ 'No data available in table'|trans }}",
+        "info": "{{ 'Showing _START_ to _END_ of _TOTAL_ entries'|trans }}",
+        "infoEmpty": "{{ 'Showing 0 to 0 of 0 entries'|trans }}",
+        "infoFiltered": "{{ '(filtered from _MAX_ total entries)'|trans }}",
         "infoPostFix": "",
         "infoThousands": "'",
-        "search": "{% trans "Search" %}:",
+        "search": "{{ 'Search'|trans }}:",
         "url": "",
         "aria": {
-            "sortAscending": " - {% trans "click/return to sort ascending" %}",
-            "sortDescending": " - {% trans "click/return to sort descending" %}"
+            "sortAscending": " - {{ 'click/return to sort ascending'|trans }}",
+            "sortDescending": " - {{ 'click/return to sort descending'|trans }}"
         },
         "paginate": {
-            "first": "{% trans "First" %}",
-            "previous": "{% trans "Previous" %}",
-            "next": "{% trans "Next" %}",
-            "last": "{% trans "Last" %}"
+            "first": "{{ 'First'|trans }}",
+            "previous": "{{ 'Previous'|trans }}",
+            "next": "{{ 'Next'|trans }}",
+            "last": "{{ 'Last'|trans }}"
         }
     }
 }

@@ -5,7 +5,7 @@ class Channel extends ChannelBase {
     private $mode_ua, $mode_ub, $mode_uc, $mode_ud, $mode_ue, $mode_uf, $mode_ug, $mode_uh, $mode_ui, $mode_uj, $mode_uk, $mode_ul, $mode_um, $mode_un, $mode_uo, $mode_up, $mode_uq, $mode_ur, $mode_us, $mode_ut, $mode_uu, $mode_uv, $mode_uw, $mode_ux, $mode_uy, $mode_uz;
     private $mode_lf_data, $mode_lj_data, $mode_lk_data, $mode_ll_data, $mode_ul_data, $mode_uf_data, $mode_uj_data;
 
-    function __construct() {
+    public function __construct() {
         parent::__construct();
 
         // Channel modes

@@ -1,11 +1,11 @@
-<h1>{% trans "Mibbit Graphs" %}</h1>
+<h1>{{ 'Mibbit Graphs'|trans }}</h1>
 
 <form>
     <div id="mibbit_type" class="choser">
-        <input type="radio" id="mibtype0" name="mibtype" checked="checked" /><label for="mibtype0">{% trans "Day" %}</label>
-        <input type="radio" id="mibtype1" name="mibtype" /><label for="mibtype1">{% trans "Week" %}</label>
-        <input type="radio" id="mibtype2" name="mibtype" /><label for="mibtype2">{% trans "Month" %}</label>
-        <input type="radio" id="mibtype3" name="mibtype" /><label for="mibtype3">{% trans "Year" %}</label>
+        <input type="radio" id="mibtype0" name="mibtype" checked="checked" /><label for="mibtype0">{{ 'Day'|trans }}</label>
+        <input type="radio" id="mibtype1" name="mibtype" /><label for="mibtype1">{{ 'Week'|trans }}</label>
+        <input type="radio" id="mibtype2" name="mibtype" /><label for="mibtype2">{{ 'Month'|trans }}</label>
+        <input type="radio" id="mibtype3" name="mibtype" /><label for="mibtype3">{{ 'Year'|trans }}</label>
     </div>
 </form>
 
@@ -14,7 +14,7 @@
     <img id="mibbit_relation" src="" alt="" />
 </div>
 
-<br />{% trans "More on" %} <a href="https://search.mibbit.com/networks/{$cfg->net_name}" rel="external" target="_blank">Mibbit</a>
+<br />{{ 'More on'|trans }} <a href="https://search.mibbit.com/networks/{$cfg->net_name}" rel="external" target="_blank">Mibbit</a>
 
 <script type="text/javascript">
 $(document).ready(function() {

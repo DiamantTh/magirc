@@ -1,6 +1,8 @@
 <?php
-// Ratbox protocol file for Magirc
 
+declare(strict_types=1);
+
+// Ratbox protocol file for Magirc
 class Protocol {
     const ircd = 'ratbox';
 
@@ -9,7 +11,7 @@ class Protocol {
     const user_modes = 'abcdfgiklnorsuwxyz';
 
     const oper_hidden_mode = '';
-    public static $oper_levels = array();
+    public static $oper_levels = [];
     const helper_mode = '';
     const bot_mode = '';
     const services_protection_mode = '';
@@ -23,5 +25,3 @@ class Protocol {
     const line_g = false;
     const host_cloaking = false;
 }
-
-?>

@@ -1,6 +1,8 @@
 <?php
-// Inspircd 1.2/2.x protocol file for Magirc
 
+declare(strict_types=1);
+
+// Inspircd 1.2/2.x protocol file for Magirc
 class Protocol {
     const ircd = 'inspircd';
 
@@ -9,7 +11,7 @@ class Protocol {
     const user_modes = 'cdghinorswxBGHIQRSW';
 
     const oper_hidden_mode = 'H';
-    public static $oper_levels = array();
+    public static $oper_levels = [];
     const helper_mode = 'h';
     const bot_mode = 'B';
     const services_protection_mode = '';
@@ -23,5 +25,3 @@ class Protocol {
     const line_g = true;
     const host_cloaking = true;
 }
-
-?>

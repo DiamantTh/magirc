@@ -14,7 +14,7 @@ abstract class ChannelBase {
     public $modes_data;
     public $DT_RowId;
 
-    function __construct() {
+    public function __construct() {
         $this->DT_RowId = $this->channel;
         $this->topic_html = $this->topic ? Magirc::irc2html($this->topic) : null;
         $this->topic = htmlentities($this->topic, ENT_COMPAT, "UTF-8");

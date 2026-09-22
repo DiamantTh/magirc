@@ -1,6 +1,8 @@
 <?php
-// Unreal 4.0 protocol file for Magirc
 
+declare(strict_types=1);
+
+// Unreal 4.0 protocol file for Magirc
 class Protocol {
     const ircd = 'unreal40';
 
@@ -9,9 +11,9 @@ class Protocol {
     const user_modes = 'diopqrstvwxzBGHIRSTVW';
 
     const oper_hidden_mode = 'H';
-    public static $oper_levels = array(
+    public static $oper_levels = [
         'o' => 'IRC Operator'
-    );
+    ];
     const helper_mode = 'h';
     const bot_mode = 'B';
     const services_protection_mode = 'S';
@@ -25,5 +27,3 @@ class Protocol {
     const line_g = true;
     const host_cloaking = true;
 }
-
-?>

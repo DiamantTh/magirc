@@ -1,11 +1,11 @@
-<h1>{% trans %}User activity for {{ target }}{% endtrans %}</h1>
+<h1>{{ 'User activity for %s'|trans|format(target) }}</h1>
 
 <form>
     <div id="type" class="choser">
-        <input type="radio" id="type0" name="type" value="total" /><label for="type0">{% trans "Total" %}</label>
-        <input type="radio" id="type1" name="type" value="daily" /><label for="type1">{% trans "Today" %}</label>
-        <input type="radio" id="type2" name="type" value="weekly" /><label for="type2">{% trans "This Week" %}</label>
-        <input type="radio" id="type3" name="type" value="monthly" checked="checked" /><label for="type3">{% trans "This Month" %}</label>
+        <input type="radio" id="type0" name="type" value="total" /><label for="type0">{{ 'Total'|trans }}</label>
+        <input type="radio" id="type1" name="type" value="daily" /><label for="type1">{{ 'Today'|trans }}</label>
+        <input type="radio" id="type2" name="type" value="weekly" /><label for="type2">{{ 'This Week'|trans }}</label>
+        <input type="radio" id="type3" name="type" value="monthly" checked="checked" /><label for="type3">{{ 'This Month'|trans }}</label>
     </div>
 </form>
 
@@ -13,29 +13,29 @@
 
 <form>
     <div id="radio" class="choser">
-        <input type="radio" id="radio0" name="radio" checked="checked" value="" /><label for="radio0">{% trans "Global" %}</label>
+        <input type="radio" id="radio0" name="radio" checked="checked" value="" /><label for="radio0">{{ 'Global'|trans }}</label>
     </div>
 </form>
 
-<h2>{% trans "Overview" %}</h2>
+<h2>{{ 'Overview'|trans }}</h2>
 
 <table id="tbl_activity" class="display">
     <thead>
         <tr>
-            <th>{% trans "Type" %}</th>
-            <th>{% trans "Letters" %}</th>
-            <th>{% trans "Words" %}</th>
-            <th>{% trans "Lines" %}</th>
-            <th>{% trans "Actions" %}</th>
-            <th>{% trans "Smileys" %}</th>
-            <th>{% trans "Kicks" %}</th>
-            <th>{% trans "Modes" %}</th>
-            <th>{% trans "Topics" %}</th>
+            <th>{{ 'Type'|trans }}</th>
+            <th>{{ 'Letters'|trans }}</th>
+            <th>{{ 'Words'|trans }}</th>
+            <th>{{ 'Lines'|trans }}</th>
+            <th>{{ 'Actions'|trans }}</th>
+            <th>{{ 'Smileys'|trans }}</th>
+            <th>{{ 'Kicks'|trans }}</th>
+            <th>{{ 'Modes'|trans }}</th>
+            <th>{{ 'Topics'|trans }}</th>
         </tr>
     </thead>
     <tbody>
         <tr>
-            <td colspan="9">{% trans "Loading" %}...</td>
+            <td colspan="9">{{ 'Loading'|trans }}...</td>
         </tr>
     </tbody>
 </table>

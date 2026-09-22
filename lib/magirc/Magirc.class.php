@@ -1,8 +1,8 @@
 <?php
 // Root path
-define('PATH_ROOT', __DIR__ . '/../../');
-
-use \Gettext\Translator as Translator;
+if (!defined('PATH_ROOT')) {
+    define('PATH_ROOT', __DIR__ . '/../../');
+}
 
 class Magirc {
     public $db;
@@ -11,91 +11,89 @@ class Magirc {
     public $translator;
     public $service;
 
-    function __construct($useTemplateEngine = false) {
+    public function __construct($useTemplateEngine = false) {
         $this->db = self::initializeDatabase();
         $this->cfg = self::initializeConfiguration();
         $this->service = self::initializeService();
         $this->slim = self::initializeFramework($useTemplateEngine);
-        $this->translator = new Translator();
-        $this->translator->register();
         self::initializeLocalization();
     }
 
     private function initializeFramework($useTemplateEngine) {
-        if ($useTemplateEngine) {
-            $configuration = [
-                'settings' => [
-                    'displayErrorDetails' => $this->cfg->debug_mode > 0,
-                ],
-            ];
+        $container = new \DI\Container();
+        $container->set('config', $this->cfg->config);
+        $container->set('locales', $this->getLocalesSelect());
+        $container->set('magirc', $this);
+        $logger = \MagIRC\Logging\LoggerFactory::get();
+        $container->set(\Psr\Log\LoggerInterface::class, $logger);
 
-            $container = new \Slim\Container($configuration);
-            $container['view'] = function ($c) {
-                $view = new \Slim\Views\Twig(__DIR__ . '/../../theme/'.$this->cfg->theme.'/tpl', [
-                    'cache' => __DIR__ . '/../../tmp',
-                    'debug' => $this->cfg->debug_mode > 0,
-                    'translation_function' => 'translate',
-                    'translation_function_plural' => 'translate_plural'
-                ]);
-                $view->addExtension(new \Slim\Views\TwigExtension(
-                    $c['router'],
-                    $c['request']->getUri()
-                ));
-                $view->addExtension(new Twig_Extensions_Extension_I18n);
-                return $view;
-            };
-            $container['notFoundHandler'] = function ($c) {
-                return function ($request, $response) use ($c) {
-                    return $c['view']->render($response, 'error.twig', [
-                        'err_code' => 404,
-                        'cfg' => $this->cfg->config
-                    ])->withStatus(404);
-                };
-            };
-            $container['notAllowedHandler'] = function ($c) {
-                return function ($request, $response) use ($c) {
-                    return $c['view']->render($response, 'error.twig', [
-                        'err_code' => 405,
-                        'cfg' => $this->cfg->config
-                    ])->withStatus(405);
-                };
-            };
-            $container['errorHandler'] = function ($c) {
-                return function ($request, $response, $exception) use ($c) {
-                    return $c['view']->render($response, 'error_fatal.twig', [
-                        'err_msg' => $exception->getMessage(),
-                        'err_extra' => nl2br($exception->getTraceAsString()),
-                        'server' => $_SERVER,
-                        'cfg' => $this->cfg->config
-                    ])->withStatus(500);
-                };
-            };
-            $container['locales'] = $this->getLocalesSelect();
-            $container['config'] = $this->cfg->config;
-        } else {
-            $configuration = [
-                'settings' => [
-                    'http.version' => '1.0'
-                ],
-            ];
-            $container['notFoundHandler'] = function ($c) {
-                return function ($request, $response) use ($c) {
-                    return $response->withJson(array('error' => "HTTP 404 Not Found"))->withStatus(404);
-                };
-            };
-            $container['notAllowedHandler'] = function ($c) {
-                return function ($request, $response) use ($c) {
-                    return $response->withJson(array('error' => "HTTP 405 Not Allowed"))->withStatus(405);
-                };
-            };
-            $container['errorHandler'] = function ($c) {
-                return function ($request, $response, $exception) use ($c) {
-                    return $response->withJson(array('error' => "HTTP 500 Internal Server Error"))->withStatus(500);
-                };
-            };
-            $container = new \Slim\Container($configuration);
+        \Slim\Factory\AppFactory::setContainer($container);
+        $app = \Slim\Factory\AppFactory::create();
+        $scriptName = (string) ($_SERVER['SCRIPT_NAME'] ?? '/index.php');
+        $basePath = dirname($scriptName);
+        if (!$useTemplateEngine || empty($this->cfg->rewrite_enable)) {
+            $basePath = $scriptName;
         }
-        return new \Slim\App($container);
+        $basePath = trim($basePath, '/');
+        if ($basePath !== '') {
+            $app->setBasePath('/' . $basePath);
+        }
+
+        if ($useTemplateEngine) {
+            $templatePath = __DIR__ . '/../../theme/' . $this->cfg->theme . '/tpl';
+            $view = \Slim\Views\Twig::create($templatePath, [
+                'cache' => __DIR__ . '/../../tmp/twig',
+                'debug' => false,
+                'autoescape' => 'html',
+            ]);
+            $view->addExtension(new \MagIRC\Twig\TranslationExtension());
+            $container->set(\Slim\Views\Twig::class, $view);
+            $container->set('view', $view);
+            $app->add(\Slim\Views\TwigMiddleware::create($app, $view));
+        }
+
+        $app->addRoutingMiddleware();
+        $app->addBodyParsingMiddleware();
+        $errors = $app->addErrorMiddleware(false, true, true);
+        $errors->setDefaultErrorHandler(function ($request, $exception, $displayErrorDetails, $logErrors, $logErrorDetails, $logMessage) use ($app, $useTemplateEngine, $logger) {
+            if ($logErrors) {
+            $logger->error('MagIRC request failed.', ['exception_class' => $exception::class]);
+            }
+            $notFound = $exception instanceof \Slim\Exception\HttpNotFoundException;
+            $notAllowed = $exception instanceof \Slim\Exception\HttpMethodNotAllowedException;
+            $status = $notFound ? 404 : ($notAllowed ? 405 : 500);
+            $response = $app->getResponseFactory()->createResponse($status);
+
+            if (!$useTemplateEngine) {
+                $message = $status === 404 ? 'HTTP 404 Not Found' : ($status === 405 ? 'HTTP 405 Not Allowed' : 'HTTP 500 Internal Server Error');
+                $response->getBody()->write(json_encode(['error' => $message], JSON_THROW_ON_ERROR));
+                return $response->withHeader('Content-Type', 'application/json; charset=utf-8');
+            }
+
+            try {
+                $view = $app->getContainer()->get(\Slim\Views\Twig::class);
+                if ($status !== 500) {
+                    return $view->render($response, 'error.twig', [
+                        'err_code' => $status,
+                        'cfg' => $this->cfg->config,
+                        'locales' => $this->getLocalesSelect(),
+                    ]);
+                }
+                return $view->render($response, 'error_fatal.twig', [
+                    'err_msg' => 'An internal error occurred.',
+                    'err_extra' => '',
+                    'server' => [],
+                    'cfg' => $this->cfg->config,
+                    'locales' => $this->getLocalesSelect(),
+                ]);
+            } catch (Throwable $renderException) {
+                $logger->error('MagIRC error template failed.', ['exception_class' => $renderException::class]);
+                $response->getBody()->write('Service temporarily unavailable.');
+                return $response->withStatus(500)->withHeader('Content-Type', 'text/plain; charset=utf-8');
+            }
+        });
+
+        return $app;
     }
 
     private function initializeDatabase() {
@@ -127,11 +125,9 @@ class Magirc {
             case 'anope':
                 require_once(__DIR__.'/../../lib/magirc/services/Anope.class.php');
                 return new Anope();
-                break;
             case 'denora':
                 require_once(__DIR__.'/../../lib/magirc/services/Denora.class.php');
                 return new Denora();
-                break;
             default:
                 return null;
         }
@@ -139,25 +135,30 @@ class Magirc {
 
     private function initializeLocalization() {
         $locale = self::getLocale();
-        putenv("LC_ALL=$locale");
-        setlocale(LC_ALL, $locale);
-        bindtextdomain('messages', 'locale');
-        bind_textdomain_codeset('messages', 'UTF-8');
-        textdomain('messages');
+        \MagIRC\I18n\LocaleResolver::activate($locale, __DIR__ . '/../../locale');
         define('LOCALE', $locale);
         define('LANG', substr($locale, 0, 2));
     }
 
     private function getLocale() {
         $locales = self::getLocales();
-        if (isset($_GET['locale']) && in_array($_GET['locale'], $locales)) {
-            setcookie('magirc_locale', $_GET['locale'], time()+60*60*24*30, '/');
-            return $_GET['locale'];
+        $resolved = \MagIRC\I18n\LocaleResolver::resolve(
+            isset($_GET['locale']) && is_string($_GET['locale']) ? $_GET['locale'] : null,
+            isset($_COOKIE['magirc_locale']) && is_string($_COOKIE['magirc_locale']) ? $_COOKIE['magirc_locale'] : null,
+            isset($_SERVER['HTTP_ACCEPT_LANGUAGE']) ? (string) $_SERVER['HTTP_ACCEPT_LANGUAGE'] : '',
+            $locales,
+            (string) $this->cfg->locale
+        );
+        if (isset($_GET['locale']) && is_string($_GET['locale']) && in_array($_GET['locale'], $locales, true)) {
+            setcookie('magirc_locale', $resolved, [
+                'expires' => time() + 60 * 60 * 24 * 30,
+                'path' => '/',
+                'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
         }
-        if (isset($_COOKIE['magirc_locale']) && in_array($_COOKIE['magirc_locale'], $locales)) {
-            return $_COOKIE['magirc_locale'];
-        }
-        return $this->detectLocale($locales);
+        return $resolved;
     }
 
     /**
@@ -165,7 +166,7 @@ class Magirc {
      * @return array
      */
     private function getLocales() {
-        $locales = array();
+        $locales = [];
         foreach (glob(PATH_ROOT."locale/*") as $filename) {
             if (is_dir($filename)) {
                 $locales[] = basename($filename);
@@ -174,43 +175,24 @@ class Magirc {
         return $locales;
     }
 
-    private function getLocalesSelect() {
-        $locales = array();
+    public function getLocalesSelect() {
+        $locales = [];
         foreach (glob(__DIR__."/../../locale/*") as $filename) {
             if (is_dir($filename)) {
                 $locale = basename($filename);
                 //This is dirty but I'm lazy...
-                switch ($locale){
-                    case 'en_US':
-                        $language = "English";
-                        break;
-                    case 'de_DE':
-                        $language = "Deutsch";
-                        break;
-                    case 'es_ES':
-                        $language = "Español";
-                        break;
-                    case 'fr_FR':
-                        $language = "Français";
-                        break;
-                    case 'it_IT':
-                        $language = "Italiano";
-                        break;
-                    case 'nl_NL':
-                        $language = "Nederlands";
-                        break;
-                    case 'ms_MY';
-                        $language = "Melayu";
-                        break;
-                    case 'tr_TR';
-                        $language = "Türkçe";
-                        break;
-                    case 'pt_PT':
-                        $language = "Português";
-                        break;
-                    default:
-                        $language = $locale;
-                }
+                $language = match ($locale) {
+                    'en_US' => "English",
+                    'de_DE' => "Deutsch",
+                    'es_ES' => "Español",
+                    'fr_FR' => "Français",
+                    'it_IT' => "Italiano",
+                    'nl_NL' => "Nederlands",
+                    'ms_MY' => "Melayu",
+                    'tr_TR' => "Türkçe",
+                    'pt_PT' => "Português",
+                    default => $locale,
+                };
                 $locales[$locale] = $language;
             }
         }
@@ -218,34 +200,11 @@ class Magirc {
     }
 
     /**
-     * Detects the best locale based on HTTP ACCEPT_LANGUAGE
-     * @param array $available_languages Array of available locales
-     * @return string Locale
-     */
-    private function detectLocale($available_locales) {
-        $hits = array();
-        $bestlang = $this->cfg->locale;
-        if (isset($_SERVER['HTTP_ACCEPT_LANGUAGE'])) {
-            preg_match_all("/([[:alpha:]]{1,8})(-([[:alpha:]|-]{1,8}))?(\s*;\s*q\s*=\s*(1\.0{0,3}|0\.\d{0,3}))?\s*(,|$)/i", $_SERVER['HTTP_ACCEPT_LANGUAGE'], $hits, PREG_SET_ORDER);
-            $bestqval = 0;
-            foreach ($hits as $arr) {
-                $langprefix = strtolower ($arr[1]);
-                $qvalue = empty($arr[5]) ? 1.0 : floatval($arr[5]);
-                if (in_array($langprefix,$available_locales) && ($qvalue > $bestqval)) {
-                    $bestlang = $langprefix;
-                    $bestqval = $qvalue;
-                }
-            }
-        }
-        return $bestlang;
-    }
-
-    /**
      * Gets the page content for the specified name
      * @param string $name Content identifier
      * @return string HTML content
      */
-    function getContent($name) {
+    public function getContent($name) {
         $ps = $this->db->prepare("SELECT text FROM magirc_content WHERE name = :name");
         $ps->bindParam(':name', $name, PDO::PARAM_STR);
         $ps->execute();
@@ -258,14 +217,14 @@ class Magirc {
      * @param mixed $data Data
      * @param string $idcolumn Column name to use as index for the DataTables automatic row id. If not specified, the first column will be used.
      */
-    function arrayForDataTables($data, $idcolumn = null) {
+    public function arrayForDataTables($data, $idcolumn = null) {
         if (@$_GET['format'] == "datatables") {
             if (!$idcolumn && count($data) > 0) $idcolumn = key($data[0]);
             foreach ($data as $key => $val) {
                 if (is_array($data[$key])) $data[$key]["DT_RowId"] = $val[$idcolumn];
                 else $data[$key]->DT_RowId = $val->$idcolumn;
             }
-            return array('data' => $data);
+            return ['data' => $data];
         }
         return $data;
     }
@@ -274,7 +233,7 @@ class Magirc {
      * Returns the session status
      * @return boolean true: valid session, false: invalid or no session
      */
-    function sessionStatus() {
+    public function sessionStatus() {
         if (!isset($_SESSION["loginUsername"])) {
             $_SESSION["message"] = "Access denied";
             return false;
@@ -292,14 +251,14 @@ class Magirc {
      * @return string HTML text
      */
     public static function irc2html($text) {
-        $lines = explode("\n", utf8_decode($text));
+        $lines = explode("\n", mb_convert_encoding($text, 'ISO-8859-1'));
         $out = '';
 
         foreach ($lines as $line) {
-            $line = nl2br(htmlentities(utf8_decode($line), ENT_COMPAT));
+            $line = nl2br(htmlentities(mb_convert_encoding($line, 'ISO-8859-1'), ENT_COMPAT));
             // replace control codes
             $line = preg_replace_callback('/[\003](\d{0,2})(,\d{1,2})?([^\003\x0F]*)(?:[\003](?!\d))?/', function($matches) {
-                        $colors = array('#FFFFFF', '#000000', '#00007F', '#009300', '#FF0000', '#7F0000', '#9C009C', '#FC7F00', '#FFFF00', '#00FC00', '#009393', '#00FFFF', '#0000FC', '#FF00FF', '#7F7F7F', '#D2D2D2');
+                        $colors = ['#FFFFFF', '#000000', '#00007F', '#009300', '#FF0000', '#7F0000', '#9C009C', '#FC7F00', '#FFFF00', '#00FC00', '#009393', '#00FFFF', '#0000FC', '#FF00FF', '#7F7F7F', '#D2D2D2'];
                         $options = '';
 
                         if ($matches[2] != '') {
@@ -310,15 +269,14 @@ class Magirc {
                         }
 
                         $forecolor = trim($matches[1]);
-                        if ($forecolor != '' && (int) $forecolor < count($colors)) {
+                        if ($forecolor !== '' && (int) $forecolor < count($colors)) {
                             $options .= 'color: ' . $colors[(int) $forecolor] . ';';
                         }
 
-                        if ($options != '') {
+                        if ($options !== '') {
                             return '<span style="' . $options . '">' . $matches[3] . '</span>';
-                        } else {
-                            return $matches[3];
                         }
+                        return $matches[3];
                     }, $line);
             $line = preg_replace('/[\002]([^\002\x0F]*)(?:[\002])?/', '<strong>$1</strong>', $line);
             $line = preg_replace('/[\x1F]([^\x1F\x0F]*)(?:[\x1F])?/', '<span style="text-decoration: underline;">$1</span>', $line);

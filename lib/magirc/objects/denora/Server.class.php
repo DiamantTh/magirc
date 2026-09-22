@@ -1,9 +1,7 @@
 <?php
 
-class Server extends ServerBase {
+declare(strict_types=1);
 
-    function __construct() {
-        parent::__construct();
-
-    }
+class Server extends ServerBase
+{
 }

@@ -22,7 +22,7 @@ abstract class ServerBase {
     public $country;
     public $country_code;
 
-    function __construct() {
+    public function __construct() {
         $this->online = ($this->online == 'Y');
         $this->motd_html = $this->motd ? Magirc::irc2html($this->motd) : null;
         $this->motd = htmlentities($this->motd, ENT_COMPAT, "UTF-8");

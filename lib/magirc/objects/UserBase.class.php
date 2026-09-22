@@ -32,7 +32,7 @@ abstract Class UserBase {
     public $bot;
     public $ipv6;
 
-    function __construct() {
+    public function __construct() {
         $this->online = ($this->online == 'Y');
         $this->away = ($this->away == 'Y');
         $this->realname = htmlentities($this->realname, ENT_COMPAT, "UTF-8");
@@ -51,7 +51,7 @@ abstract Class UserBase {
         } elseif (Protocol::host_cloaking && !empty($this->hostname_cloaked)) {
             $this->hostname = $this->hostname_cloaked;
         }
-        if (!Protocol::oper_hidden_mode || !$this->hasMode(Protocol::oper_hidden_mode)) {
+        if (!$this->hasMode(Protocol::oper_hidden_mode)) {
             $this->helper = $this->hasMode(Protocol::helper_mode);
         }
         // Get the server country if user country is local
@@ -62,6 +62,6 @@ abstract Class UserBase {
     }
 
     public function hasMode($mode) {
-        return $mode ? strstr($this->umodes, $mode) !== false : false;
+        return $mode && str_contains($this->umodes, (string) $mode);
     }
 }

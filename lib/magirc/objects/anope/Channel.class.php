@@ -1,10 +1,7 @@
 <?php
 
-class Channel extends ChannelBase {
+declare(strict_types=1);
 
-    function __construct() {
-        parent::__construct();
-
-    }
-
+class Channel extends ChannelBase
+{
 }

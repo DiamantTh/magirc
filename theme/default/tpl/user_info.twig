@@ -1,17 +1,17 @@
-<h1>{% trans %}User info for {{ target }}{% endtrans %}</h1>
+<h1>{{ 'User info for %s'|trans|format(target) }}</h1>
 
 <table id="tbl_details" class="details">
-    <tr><th>{% trans "Nickname" %}:</th><td><span id="user_nick" class="val"></span></td></tr>
-    {%if not cfg.hide_nickaliases %}<tr><th>{% trans "Aliases" %}:</th><td><span id="user_aliases" class="val"></span></td></tr>{% endif %}
-    <tr><th>{% trans "Stats Username" %}:</th><td><span id="user_uname" class="val"></span></td></tr>
-    <tr><th>{% trans "Real name" %}:</th><td><span id="user_realname" class="val"></span></td></tr>
-    <tr><th>{% trans "Hostname" %}:</th><td><span id="user_hostname" class="val"></span></td></tr>
-    <tr><th>{% trans "Server" %}:</th><td><span id="user_server" class="val"></span></td></tr>
-    <tr><th>{% trans "Connecting from" %}:</th><td><span id="user_cityregion" class="val"></span><span id="user_country" class="val"></span></td></tr>
-    <tr><th>{% trans "Client" %}:</th><td><span id="user_client" class="val"></span></td></tr>
-    <tr><th>{% trans "Status" %}:</th><td><span id="user_status" class="val"></span><span id="user_status_extra"></span></td></tr>
+    <tr><th>{{ 'Nickname'|trans }}:</th><td><span id="user_nick" class="val"></span></td></tr>
+    {%if not cfg.hide_nickaliases %}<tr><th>{{ 'Aliases'|trans }}:</th><td><span id="user_aliases" class="val"></span></td></tr>{% endif %}
+    <tr><th>{{ 'Stats Username'|trans }}:</th><td><span id="user_uname" class="val"></span></td></tr>
+    <tr><th>{{ 'Real name'|trans }}:</th><td><span id="user_realname" class="val"></span></td></tr>
+    <tr><th>{{ 'Hostname'|trans }}:</th><td><span id="user_hostname" class="val"></span></td></tr>
+    <tr><th>{{ 'Server'|trans }}:</th><td><span id="user_server" class="val"></span></td></tr>
+    <tr><th>{{ 'Connecting from'|trans }}:</th><td><span id="user_cityregion" class="val"></span><span id="user_country" class="val"></span></td></tr>
+    <tr><th>{{ 'Client'|trans }}:</th><td><span id="user_client" class="val"></span></td></tr>
+    <tr><th>{{ 'Status'|trans }}:</th><td><span id="user_status" class="val"></span><span id="user_status_extra"></span></td></tr>
 </table>
-<div id="nodata" style="display:none;">{% trans "Information for this user currently unavailable" %}</div>
+<div id="nodata" style="display:none;">{{ 'Information for this user currently unavailable'|trans }}</div>
 
 <script type="text/javascript">
 $(document).ready(function() {

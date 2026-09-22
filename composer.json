@@ -22,15 +22,70 @@
         "source": "https://github.com/h9k/magirc"
     },
     "require": {
-        "php": ">=5.6.0",
-        "ext-pdo_mysql": "*",
+        "php": ">=8.4",
+        "ext-dom": "*",
         "ext-gettext": "*",
-        "slim/slim": "3.*",
-        "slim/twig-view": "^2.0",
-        "twig/extensions": "^1.5",
-        "aptoma/twig-markdown": "^2.0",
-        "michelf/php-markdown": "^1.6",
-        "ckeditor/ckeditor": "^4.5",
-        "gettext/gettext": "^4.4"
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "ext-pdo": "*",
+        "ext-pdo_mysql": "*",
+        "michelf/php-markdown": "^2.0",
+        "monolog/monolog": "^3.0",
+        "php-di/php-di": "^7.0",
+        "phpfastcache/phpfastcache": "^9.0",
+        "slim/csrf": "^1.5",
+        "slim/psr7": "^1.7",
+        "slim/slim": "^4.15",
+        "slim/twig-view": "^3.4",
+        "twig/twig": "^3.0"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^12.4",
+        "rector/rector": "^2.2",
+        "squizlabs/php_codesniffer": "^3.13"
+    },
+    "autoload": {
+        "psr-4": {
+            "MagIRC\\": "src/MagIRC/"
+        },
+        "classmap": [
+            "lib/magirc/Config.class.php",
+            "lib/magirc/ConfigStore.class.php",
+            "lib/magirc/DB.class.php",
+            "lib/magirc/Magirc.class.php",
+            "lib/magirc/MagircDB.php",
+            "lib/magirc/Security.class.php",
+            "lib/magirc/services/Anope.class.php",
+            "lib/magirc/services/Denora.class.php",
+            "lib/magirc/services/Service.interface.php",
+            "lib/magirc/objects/ChannelBase.class.php",
+            "lib/magirc/objects/ServerBase.class.php",
+            "lib/magirc/objects/UserBase.class.php",
+            "admin/lib/Admin.class.php",
+            "setup/lib/Setup.class.php"
+        ]
+    },
+    "config": {
+        "platform": {
+            "php": "8.4.0"
+        },
+        "sort-packages": true,
+        "allow-plugins": {
+            "php-http/discovery": false
+        }
+    },
+    "scripts": {
+        "test": [
+            "phpunit --testsuite 'MagIRC regression tests'",
+            "sh tests/security/run.sh",
+            "sh tests/integration/run.sh"
+        ],
+        "test:security": "sh tests/security/run.sh",
+        "test:integration": "sh tests/integration/run.sh",
+        "test:installation": "sh tests/installation/run.sh",
+        "analyse": "phpstan analyse --no-progress --debug",
+        "cs": "phpcs",
+        "rector:check": "rector process --dry-run --no-progress-bar --max-changes=1000"
     }
 }

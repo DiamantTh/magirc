@@ -1,12 +1,12 @@
 {% extends "layout.twig" %}
 
-{% block title %}{{ parent() }}{% trans "Servers" %}{% endblock %}
+{% block title %}{{ parent() }}{{ 'Servers'|trans }}{% endblock %}
 
 {% block content %}
 <div id="tabs">
     <ul>
-        <li title="servers"><a href="index.php/server/list">{% trans "Servers" %}</a></li>
-        <li title="history"><a href="index.php/server/history">{% trans "History" %}</a></li>
+        <li title="servers"><a href="index.php/server/list">{{ 'Servers'|trans }}</a></li>
+        <li title="history"><a href="index.php/server/history">{{ 'History'|trans }}</a></li>
     </ul>
 </div>
 {% endblock %}

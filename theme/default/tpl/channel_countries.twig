@@ -1,13 +1,13 @@
-<h1>{% trans %}Current Country Statistics for {{ target }}{% endtrans %}</h1>
+<h1>{{ 'Current Country Statistics for %s'|trans|format(target) }}</h1>
 
 <div id="chart-countries" style="min-width: 700px; height: 400px; margin: 0 auto"></div>
 
 <table id="tbl_countries" class="display">
     <thead>
-        <tr><th>{% trans "Country" %}</th><th>{% trans "Count" %}</th></tr>
+        <tr><th>{{ 'Country'|trans }}</th><th>{{ 'Count'|trans }}</th></tr>
     </thead>
     <tbody>
-        <tr><td colspan="2">{% trans "Loading" %}...</td></tr>
+        <tr><td colspan="2">{{ 'Loading'|trans }}...</td></tr>
     </tbody>
 </table>
 

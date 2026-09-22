@@ -1,29 +1,29 @@
-<h1>{% trans %}Server info for {{ target }}{% endtrans %}</h1>
+<h1>{{ 'Server info for %s'|trans|format(target) }}</h1>
 
 <div class="halfleft">
     <table class="details">
-        <tr><th>{% trans "Description" %}:</th><td><span id="srv_description" class="val"></span></td></tr>
-        {% if cfg.service == 'denora' %}<tr><th>{% trans "Country" %}:</th><td><span id="srv_country" class="val"></span></td></tr>{% endif %}
-        <tr><th>{% trans "Online" %}:</th><td><span id="srv_online" class="val"></span></td></tr>
-        {% if cfg.service == 'denora' %}<tr><th>{% trans "Version" %}:</th><td><span id="srv_version" class="val"></span></td></tr>
-        <tr><th>{% trans "Uptime" %}:</th><td><span id="srv_uptime" class="val"></span></td></tr>{% endif %}
-        <tr><th>{% trans "Last split" %}:</th><td><span id="srv_lastsplit" class="val"></span></td></tr>
+        <tr><th>{{ 'Description'|trans }}:</th><td><span id="srv_description" class="val"></span></td></tr>
+        {% if cfg.service == 'denora' %}<tr><th>{{ 'Country'|trans }}:</th><td><span id="srv_country" class="val"></span></td></tr>{% endif %}
+        <tr><th>{{ 'Online'|trans }}:</th><td><span id="srv_online" class="val"></span></td></tr>
+        {% if cfg.service == 'denora' %}<tr><th>{{ 'Version'|trans }}:</th><td><span id="srv_version" class="val"></span></td></tr>
+        <tr><th>{{ 'Uptime'|trans }}:</th><td><span id="srv_uptime" class="val"></span></td></tr>{% endif %}
+        <tr><th>{{ 'Last split'|trans }}:</th><td><span id="srv_lastsplit" class="val"></span></td></tr>
     </table>
 </div>
 <div class="halfright">
     <table class="details">
-        {% if cfg.service == 'denora' %}<tr><th>{% trans "Last ping" %}:</th><td><span id="srv_ping" class="val"></span></td></tr>
-        <tr><th>{% trans "Highest ping" %}:</th><td><span id="srv_maxping" class="val"></span> {% trans "on" %} <span id="srv_maxpingtime"></td></tr>{% endif %}
-        <tr><th>{% trans "Current users" %}:</th><td><span id="srv_users" class="val"></span></td></tr>
-        <tr><th>{% trans "Max users" %}:</th><td><span id="srv_maxusers" class="val"></span> {% trans "on" %} <span id="srv_maxusertime"></td></tr>
-        <tr><th>{% trans "Current opers" %}:</th><td><span id="srv_opers" class="val"></span></td></tr>
-        {% if cfg.service == 'denora' %}<tr><th>{% trans "Max opers" %}:</th><td><span id="srv_maxopers" class="val"></span> {% trans "on" %} <span id="srv_maxopertime"></td></tr>{% endif %}
+        {% if cfg.service == 'denora' %}<tr><th>{{ 'Last ping'|trans }}:</th><td><span id="srv_ping" class="val"></span></td></tr>
+        <tr><th>{{ 'Highest ping'|trans }}:</th><td><span id="srv_maxping" class="val"></span> {{ 'on'|trans }} <span id="srv_maxpingtime"></td></tr>{% endif %}
+        <tr><th>{{ 'Current users'|trans }}:</th><td><span id="srv_users" class="val"></span></td></tr>
+        <tr><th>{{ 'Max users'|trans }}:</th><td><span id="srv_maxusers" class="val"></span> {{ 'on'|trans }} <span id="srv_maxusertime"></td></tr>
+        <tr><th>{{ 'Current opers'|trans }}:</th><td><span id="srv_opers" class="val"></span></td></tr>
+        {% if cfg.service == 'denora' %}<tr><th>{{ 'Max opers'|trans }}:</th><td><span id="srv_maxopers" class="val"></span> {{ 'on'|trans }} <span id="srv_maxopertime"></td></tr>{% endif %}
     </table>
 </div>
 
 <div class="clear">&nbsp;</div>
 
-{% if cfg.service == 'denora' %}<h2>{% trans "Message of the day" %}</h2>
+{% if cfg.service == 'denora' %}<h2>{{ 'Message of the day'|trans }}</h2>
 <div id="srv_motd" class="motd clear" title="MOTD"><pre id="srv_motd_txt"></pre></div>{% endif %}
 
 <script type="text/javascript">

@@ -1,6 +1,8 @@
 <?php
-// Scarynet protocol file for Magirc
 
+declare(strict_types=1);
+
+// Scarynet protocol file for Magirc
 class Protocol {
     const ircd = 'scarynet';
 
@@ -9,7 +11,7 @@ class Protocol {
     const user_modes = 'dghikorswxBCHORW';
 
     const oper_hidden_mode = '';
-    public static $oper_levels = array();
+    public static $oper_levels = [];
     const helper_mode = 'H';
     const bot_mode = 'B';
     const services_protection_mode = '';
@@ -23,5 +25,3 @@ class Protocol {
     const line_g = false;
     const host_cloaking = true;
 }
-
-?>

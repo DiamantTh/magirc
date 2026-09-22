@@ -1,62 +1,59 @@
 <?php
 
+require_once(__DIR__ . '/../ConfigStore.class.php');
+
+use MagIRC\Cache\StatisticsCache;
+use MagIRC\Cache\StatisticsCacheFactory;
+use MagIRC\Logging\LoggerFactory;
+use Psr\Log\LoggerInterface;
+
 class Denora_DB extends DB {
-    private static $instance = NULL;
+    private static $instance;
 
     public static function getInstance() {
-        if (is_null(self::$instance) === true) {
-            $db = null;
-            $error = false;
-            $config_file = PATH_ROOT . 'conf/denora.cfg.php';
-            if (file_exists($config_file)) {
-                include($config_file);
-            } else {
-                $error = true;
-            }
-            if ($error || !is_array($db)) {
+        if (is_null(self::$instance)) {
+            try {
+                $db = MagircConfigStore::load('denora', PATH_ROOT . 'conf');
+            } catch (Exception $exception) {
+                LoggerFactory::get()->error('Denora database configuration could not be loaded.', ['exception_class' => $exception::class]);
                 die('<strong>MagIRC</strong> is not properly configured<br />Please configure the Denora database in the <a href="admin/">Admin Panel</a>');
             }
-            $dsn = "mysql:dbname={$db['database']};host={$db['hostname']}";
-            $args = array();
-            if (isset($db['ssl']) && $db['ssl_key']) {
-                $args[PDO::MYSQL_ATTR_SSL_KEY] = $db['ssl_key'];
-            }
-            if (isset($db['ssl']) && $db['ssl_cert']) {
-                $args[PDO::MYSQL_ATTR_SSL_CERT] = $db['ssl_cert'];
-            }
-            if (isset($db['ssl']) && $db['ssl_ca']) {
-                $args[PDO::MYSQL_ATTR_SSL_CA] = $db['ssl_ca'];
-            }
+            $dsn = MagircConfigStore::dsn($db);
+            $args = MagircConfigStore::pdoOptions($db);
             self::$instance = new DB($dsn, $db['username'], $db['password'], $args);
             self::setTableNames($db);
             if (self::$instance->error) {
-                die('Error opening the Denora database<br />' . self::$instance->error);
+                LoggerFactory::get()->error('Denora database is unavailable.');
+                die('Service temporarily unavailable.');
             }
         }
         return self::$instance;
     }
 
     private static function setTableNames($db) {
-        define('TBL_CURRENT', isset($db['current']) ? $db['current'] : 'current');
-        define('TBL_MAXVALUES', isset($db['maxvalues']) ? $db['maxvalues'] : 'maxvalues');
-        define('TBL_USER', isset($db['user']) ? $db['user'] : 'user');
-        define('TBL_SERVER', isset($db['server']) ? $db['server'] : 'server');
-        define('TBL_USERSTATS', isset($db['stats']) ? $db['stats'] : 'stats');
-        define('TBL_CHANNELSTATS', isset($db['channelstats']) ? $db['channelstats'] : 'channelstats');
-        define('TBL_SERVERSTATS', isset($db['serverstats']) ? $db['serverstats'] : 'serverstats');
-        define('TBL_USTATS', isset($db['ustats']) ? $db['ustats'] : 'ustats');
-        define('TBL_CSTATS', isset($db['cstats']) ? $db['cstats'] : 'cstats');
-        define('TBL_CHAN', isset($db['chan']) ? $db['chan'] : 'chan');
-        define('TBL_ISON', isset($db['ison']) ? $db['ison'] : 'ison');
-        define('TBL_ALIASES', isset($db['aliases']) ? $db['aliases'] : 'aliases');
+        define('TBL_CURRENT', $db['current'] ?? 'current');
+        define('TBL_MAXVALUES', $db['maxvalues'] ?? 'maxvalues');
+        define('TBL_USER', $db['user'] ?? 'user');
+        define('TBL_SERVER', $db['server'] ?? 'server');
+        define('TBL_USERSTATS', $db['stats'] ?? 'stats');
+        define('TBL_CHANNELSTATS', $db['channelstats'] ?? 'channelstats');
+        define('TBL_SERVERSTATS', $db['serverstats'] ?? 'serverstats');
+        define('TBL_USTATS', $db['ustats'] ?? 'ustats');
+        define('TBL_CSTATS', $db['cstats'] ?? 'cstats');
+        define('TBL_CHAN', $db['chan'] ?? 'chan');
+        define('TBL_ISON', $db['ison'] ?? 'ison');
+        define('TBL_ALIASES', $db['aliases'] ?? 'aliases');
     }
 }
 
 class Denora implements Service {
     private $db;
     private $cfg;
+    private readonly StatisticsCache $statisticsCache;
+    private readonly LoggerInterface $logger;
 
-    public function __construct() {
+    public function __construct(?LoggerInterface $logger = null, ?StatisticsCache $statisticsCache = null) {
+        $this->logger = $logger ?? LoggerFactory::get();
         $ircd_file = PATH_ROOT . "lib/magirc/ircds/" . IRCD . ".inc.php";
         if (file_exists($ircd_file)) {
             require_once($ircd_file);
@@ -65,6 +62,13 @@ class Denora implements Service {
         }
         $this->db = Denora_db::getInstance();
         $this->cfg = new Config();
+        $dbConfig = [];
+        try {
+            $dbConfig = MagircConfigStore::load('denora', PATH_ROOT . 'conf');
+        } catch (\Throwable $exception) {
+            $this->logger->warning('Denora cache configuration unavailable.', ['exception_class' => $exception::class]);
+        }
+        $this->statisticsCache = $statisticsCache ?? StatisticsCacheFactory::create($dbConfig + (array) $this->cfg->config, 'denora', $this->logger);
         require_once(__DIR__.'/../objects/denora/Server.class.php');
         require_once(__DIR__.'/../objects/denora/Channel.class.php');
         require_once(__DIR__.'/../objects/denora/User.class.php');
@@ -75,12 +79,16 @@ class Denora implements Service {
      * @return array of arrays (int val, int time)
      */
     public function getCurrentStatus() {
+        return $this->statisticsCache->remember('current_status', [], fn () => $this->getCurrentStatusUncached());
+    }
+
+    private function getCurrentStatusUncached() {
         $query = sprintf("SELECT type, val, FROM_UNIXTIME(time) AS time FROM `%s`", TBL_CURRENT);
         $this->db->query($query, SQL_ALL, SQL_ASSOC);
         $result = $this->db->record;
-        $data = array();
+        $data = [];
         foreach ($result as $row) {
-            $data[$row["type"]] = array('val' => (int) $row["val"], 'time' => $row['time']);
+            $data[$row["type"]] = ['val' => (int) $row["val"], 'time' => $row['time']];
         }
         return $data;
     }
@@ -90,12 +98,16 @@ class Denora implements Service {
      * @return array of arrays (int val, int time)
      */
     public function getMaxValues() {
+        return $this->statisticsCache->remember('max_values', [], fn () => $this->getMaxValuesUncached());
+    }
+
+    private function getMaxValuesUncached() {
         $query = sprintf("SELECT type, val, time FROM `%s`", TBL_MAXVALUES);
         $this->db->query($query, SQL_ALL, SQL_ASSOC);
         $result = $this->db->record;
-        $data = array();
+        $data = [];
         foreach ($result as $row) {
-            $data[$row["type"]] = array('val' => (int) $row["val"], 'time' => $row['time']);
+            $data[$row["type"]] = ['val' => (int) $row["val"], 'time' => $row['time']];
         }
         return $data;
     }
@@ -109,22 +121,11 @@ class Denora implements Service {
     public static function getSqlMode($mode) {
         if (!$mode) {
             return null;
-        } elseif (strtoupper($mode) === $mode) {
-            return "mode_u" . strtolower($mode);
-        } else {
-            return "mode_l" . strtolower($mode);
         }
-    }
-
-    /**
-     * Return the mode data formatted for SQL
-     * Example: o -> mode_lo_data, C -> mode_uc_data
-     * @param string $mode Mode
-     * @return string SQL Mode data
-     */
-    private static function getSqlModeData($mode) {
-        $sql_mode = self::getSqlMode($mode);
-        return $sql_mode ? $sql_mode . "_data" : null;
+        if (strtoupper($mode) === $mode) {
+            return "mode_u" . strtolower($mode);
+        }
+        return "mode_l" . strtolower($mode);
     }
 
     /**
@@ -134,6 +135,10 @@ class Denora implements Service {
      * @return int User count
      */
     public function getUserCount($mode = null, $target = null) {
+        return $this->statisticsCache->remember('user_count', ['mode' => $mode, 'target' => $target], fn () => $this->getUserCountUncached($mode, $target), false, $this->cacheScope($mode, $target));
+    }
+
+    private function getUserCountUncached($mode = null, $target = null) {
         $query = sprintf("SELECT COUNT(*) FROM `%s` AS u JOIN `%s` AS s ON s.servid = u.servid", TBL_USER, TBL_SERVER);
         if ($mode == 'channel' && $target) {
             $query .= sprintf(" JOIN `%s` AS i ON i.nickid = u.nickid
@@ -154,6 +159,12 @@ class Denora implements Service {
         if ($mode == 'server' && $target) $ps->bindValue(':server', $target, PDO::PARAM_STR);
         $ps->execute();
         return $ps->fetch(PDO::FETCH_COLUMN);
+    }
+
+    private function cacheScope($mode, $target): string
+    {
+        $scope = $mode && $target ? 'restricted:' . hash('sha256', (string) $target) : 'public';
+        return $scope . ':hide-ulined=' . (int) (bool) $this->cfg->hide_ulined . ':protection=' . (Protocol::services_protection_mode ?? '');
     }
 
     /**
@@ -222,26 +233,26 @@ class Denora implements Service {
      * @return array of arrays (string 'name', int 'count', double 'y')
      */
     public function makeCountryPieData($result, $sum) {
-        $data = array();
+        $data = [];
         $unknown = 0;
         $other = 0;
         foreach ($result as $val) {
             $percent = round($val["count"] / $sum * 100, 2);
-            if (in_array ($val['country'], array("Unknown", "localhost"))) {
+            if (in_array ($val['country'], ["Unknown", "localhost"])) {
                 $unknown += $val["count"];
-            } elseif (in_array ($val['country_code'], array(null, "", "??"))) {
+            } elseif (in_array ($val['country_code'], [null, "", "??"])) {
                 $unknown += $val["count"];
             } elseif ($percent < 2) {
                 $other += $val["count"];
             } else {
-                $data[] = array('name' => $val['country'] ? $val['country'] : $val['country_code'], 'count' => $val["count"], 'y' => $percent);
+                $data[] = ['name' => $val['country'] ?: $val['country_code'], 'count' => $val["count"], 'y' => $percent];
             }
         }
         if ($unknown > 0) {
-            $data[] = array('name' => gettext('Unknown'), 'count' => $unknown, 'y' => round($unknown / $sum * 100, 2));
+            $data[] = ['name' => gettext('Unknown'), 'count' => $unknown, 'y' => round($unknown / $sum * 100, 2)];
         }
         if ($other > 0) {
-            $data[] = array('name' => gettext('Other'), 'count' => $other, 'y' => round($other / $sum * 100, 2));
+            $data[] = ['name' => gettext('Other'), 'count' => $other, 'y' => round($other / $sum * 100, 2)];
         }
         return $data;
     }
@@ -253,23 +264,23 @@ class Denora implements Service {
      * @return array (clients => (name, count, y), versions (name, version, cat, count, y))
      */
     public function makeClientPieData($result, $sum) {
-        $clients = array();
+        $clients = [];
         foreach ($result as $client) {
             // Determine client name and version
-            $matches = array();
-            preg_match('/^(.*?)\s*(\S*\d\S*)/', str_replace(array('(',')','[',']','{','}'), '', $client['client']), $matches);
-            if (count($matches) == 3) {
+            $matches = [];
+            preg_match('/^(.*?)\s*(\S*\d\S*)/', str_replace(['(',')','[',']','{','}'], '', $client['client']), $matches);
+            if (count($matches) === 3) {
                 $name = $matches[1];
                 $version = $matches[2][0] == 'v' ? substr($matches[2], 1) : $matches[2];
             } else {
-                $name = $client['client'] ? $client['client'] : gettext('Unknown');
+                $name = $client['client'] ?: gettext('Unknown');
                 $version = '';
             }
             $name = trim($name);
             $version = trim($version);
             // Categorize the versions
             if (!array_key_exists($name, $clients)) {
-                $clients[$name] = array('count' => $client['count'], 'versions' => array());
+                $clients[$name] = ['count' => $client['count'], 'versions' => []];
             } else {
                 $clients[$name]['count'] += $client['count'];
             }
@@ -280,9 +291,7 @@ class Denora implements Service {
             }
         }
         // Sort by count descending
-        uasort($clients, function($a, $b) {
-            return $a['count'] < $b['count'];
-        });
+        uasort($clients, fn($a, $b) => $a['count'] < $b['count']);
         foreach ($clients as $key => $val) {
             arsort($clients[$key]['versions']);
             unset($val);
@@ -290,42 +299,42 @@ class Denora implements Service {
 
         // Prepare data for output
         $min_count = ceil($sum / 300);
-        $data = array('clients' => array(), 'versions' => array());
-        $other = array('count' => 0, 'versions' => array());
+        $data = ['clients' => [], 'versions' => []];
+        $other = ['count' => 0, 'versions' => []];
         $other_various = 0;
         foreach ($clients as $name => $client) {
             $percent = round($client['count'] / $sum * 100, 2);
-            if ($percent < 2 || $name == gettext('Unknown')) { // Too small or unknown
+            if ($percent < 2 || $name === gettext('Unknown')) { // Too small or unknown
                 $other['count'] += $client['count'];
                 foreach ($client['versions'] as $version => $count) {
                     if ($count < $min_count) {
                         $other_various += $count;
                     } else {
-                        $other['versions'][] = array('name' => $name, 'version' => $version, 'cat' => gettext('Other'), 'count' => (int) $count, 'y' => (double) round($count / $sum * 100, 2));
+                        $other['versions'][] = ['name' => $name, 'version' => $version, 'cat' => gettext('Other'), 'count' => (int) $count, 'y' => round($count / $sum * 100, 2)];
                     }
                 }
             } else {
                 $data_various = 0;
-                $data['clients'][] = array('name' => $name, 'count' => (int) $client['count'], 'y' => (double) $percent);
+                $data['clients'][] = ['name' => $name, 'count' => (int) $client['count'], 'y' => $percent];
                 foreach ($client['versions'] as $version => $count) {
                     if ($count < $min_count) {
                         $data_various += $count;
                     } else {
-                        $data['versions'][] = array('name' => $name, 'version' => $version, 'cat' => $name, 'count' => (int) $count, 'y' => (double) round($count / $sum * 100, 2));
+                        $data['versions'][] = ['name' => $name, 'version' => $version, 'cat' => $name, 'count' => (int) $count, 'y' => round($count / $sum * 100, 2)];
                     }
                 }
                 if ($data_various) {
-                    $data['versions'][] = array('name' => $name, 'version' => '('.gettext('various').')', 'cat' => $name, 'count' => (int) $data_various, 'y' => (double) round($data_various / $sum * 100, 2));
+                    $data['versions'][] = ['name' => $name, 'version' => '('.gettext('various').')', 'cat' => $name, 'count' => (int) $data_various, 'y' => round($data_various / $sum * 100, 2)];
                 }
             }
         }
         if ($other_various) {
-            $other['versions'][] = array('name' => gettext('Various'), 'version' => '', 'cat' => gettext('Other'), 'count' => (int) $other_various, 'y' => (double) round($other_various / $sum * 100, 2));;
+            $other['versions'][] = ['name' => gettext('Various'), 'version' => '', 'cat' => gettext('Other'), 'count' => (int) $other_various, 'y' => round($other_various / $sum * 100, 2)];
         }
         // Append other slices
         if ($other['count'] > 0) {
             $other['percent'] = round($other['count'] / $sum * 100, 2);
-            $data['clients'][] = array('name' => gettext('Other'), 'count' => (int) $other['count'], 'y' => (double) $other['percent']);
+            $data['clients'][] = ['name' => gettext('Other'), 'count' => (int) $other['count'], 'y' => (float) $other['percent']];
             $data['versions'] = array_merge($data['versions'], $other['versions']);
         }
         return $data;
@@ -336,7 +345,7 @@ class Denora implements Service {
      * @return array of arrays (int milliseconds, int value)
      */
     public function getUserHistory() {
-        return $this->getHistory(TBL_USERSTATS);
+        return $this->statisticsCache->remember('history_users', [], fn () => $this->getHistory(TBL_USERSTATS), true);
     }
 
     /**
@@ -344,7 +353,7 @@ class Denora implements Service {
      * @return array of arrays (int milliseconds, int value)
      */
     public function getChannelHistory() {
-        return $this->getHistory(TBL_CHANNELSTATS);
+        return $this->statisticsCache->remember('history_channels', [], fn () => $this->getHistory(TBL_CHANNELSTATS), true);
     }
 
     /**
@@ -352,7 +361,7 @@ class Denora implements Service {
      * @return array of arrays (int milliseconds, int value)
      */
     public function getServerHistory() {
-        return $this->getHistory(TBL_SERVERSTATS);
+        return $this->statisticsCache->remember('history_servers', [], fn () => $this->getHistory(TBL_SERVERSTATS), true);
     }
 
     private function getHistory($table) {
@@ -360,11 +369,11 @@ class Denora implements Service {
         $ps = $this->db->prepare($query);
         $ps->execute();
         $result = $ps->fetchAll(PDO::FETCH_ASSOC);
-        $data = array();
+        $data = [];
         foreach ($result as $val) {
             $date = "{$val['year']}-{$val['month']}-{$val['day']}";
             for ($i = 0; $i < 24; $i++) {
-                $data[] = array(strtotime("{$date} {$i}:00:00") * 1000, $val["time_" . $i] ? (int) $val["time_" . $i] : null);
+                $data[] = [strtotime("{$date} {$i}:00:00") * 1000, $val["time_" . $i] ? (int) $val["time_" . $i] : null];
             }
         }
         return $data;
@@ -419,7 +428,7 @@ class Denora implements Service {
             u.username, u.connecttime AS connect_time, u.server, u.away, u.awaymsg AS away_msg, u.ctcpversion AS client, u.online,
             u.lastquit AS quit_time, u.lastquitmsg AS quit_msg, u.countrycode AS country_code, u.country, s.uline AS service, %s,
             s.country AS server_country, s.countrycode AS server_country_code FROM `%s` AS u LEFT JOIN `%s` AS s ON s.servid = u.servid WHERE",
-            implode(',', array_map(array('Denora', 'getSqlMode'), str_split(Protocol::user_modes))), TBL_USER, TBL_SERVER);
+            implode(',', array_map(['Denora', 'getSqlMode'], str_split(Protocol::user_modes))), TBL_USER, TBL_SERVER);
         $levels = Protocol::$oper_levels;
         if (!empty($levels)) {
             $i = 1;
@@ -474,13 +483,13 @@ class Denora implements Service {
 
         $query = sprintf("SELECT SQL_CALC_FOUND_ROWS channel, currentusers AS users, maxusers AS users_max, FROM_UNIXTIME(maxusertime) AS users_max_time,
             topic, topicauthor AS topic_author, topictime AS topic_time, kickcount AS kicks, %s, %s FROM `%s` WHERE %s",
-                implode(',', array_map(array('Denora', 'getSqlMode'), str_split(Protocol::chan_modes))),
-                implode(',', array_map(array('Denora', 'getSqlModeData'), str_split(Protocol::chan_modes_data))), TBL_CHAN, $where);
+                implode(',', array_map(['Denora', 'getSqlMode'], str_split(Protocol::chan_modes))),
+                implode(',', array_map(['Denora', 'getSqlModeData'], str_split(Protocol::chan_modes_data))), TBL_CHAN, $where);
 
         if ($datatables) {
             $total = $this->db->datatablesTotal($query);
-            $filtering = $this->db->datatablesFiltering(array('channel', 'topic'));
-            $ordering = $this->db->datatablesOrdering();
+            $filtering = $this->db->datatablesFiltering(['channel', 'topic']);
+            $ordering = $this->db->datatablesOrdering(['channel' => 'channel', 'users' => 'users', 'users_max' => 'users_max', 'topic' => 'topic', 'kicks' => 'kicks']);
             $paging = $this->db->datatablesPaging();
             $query .= sprintf(" %s %s %s", $filtering ? "AND " . $filtering : "", $ordering, $paging);
         } else {
@@ -510,7 +519,8 @@ class Denora implements Service {
             $query .= sprintf(" AND %s = 'N'", self::getSqlMode($secret_mode));
         }
         $hide_chans = explode(",", $this->cfg->hide_chans);
-        for ($i = 0; $i < count($hide_chans); $i++) {
+        $counter = count($hide_chans);
+        for ($i = 0; $i < $counter; $i++) {
             $query .= " AND LOWER(channel) NOT LIKE " . $this->db->escape(strtolower($hide_chans[$i]));
         }
         $query .= " ORDER BY currentusers DESC LIMIT :limit";
@@ -538,7 +548,8 @@ class Denora implements Service {
             $query .= sprintf(" AND c.%s='N'", self::getSqlMode($private_mode));
         }
         $hide_chans = explode(",", $this->cfg->hide_chans);
-        for ($i = 0; $i < count($hide_chans); $i++) {
+        $counter = count($hide_chans);
+        for ($i = 0; $i < $counter; $i++) {
             $query .= " AND cs.chan NOT LIKE " . $this->db->escape(strtolower($hide_chans[$i]));
         }
         $query .= " ORDER BY cs.line DESC LIMIT :limit";
@@ -554,7 +565,7 @@ class Denora implements Service {
      * @return array of user stats
      */
     public function getUsersTop($limit = 10) {
-        $aaData = array();
+        $aaData = [];
         $query = sprintf("SELECT uname, line AS 'lines' FROM `%s`
             WHERE type = 1 AND chan='global' AND line >= 1 ORDER BY line DESC LIMIT :limit", TBL_USTATS);
         $ps = $this->db->prepare($query);
@@ -582,8 +593,8 @@ class Denora implements Service {
         $query = sprintf("SELECT channel, currentusers AS users, maxusers AS users_max, FROM_UNIXTIME(maxusertime) AS users_max_time,
             topic, topicauthor AS topic_author, topictime AS topic_time, kickcount AS kicks, %s, %s
             FROM `%s` WHERE BINARY LOWER(channel) = LOWER(:chan)",
-                implode(',', array_map(array('Denora', 'getSqlMode'), str_split(Protocol::chan_modes))),
-                implode(',', array_map(array('Denora', 'getSqlModeData'), str_split(Protocol::chan_modes_data))),
+                implode(',', array_map(['Denora', 'getSqlMode'], str_split(Protocol::chan_modes))),
+                implode(',', array_map(['Denora', 'getSqlModeData'], str_split(Protocol::chan_modes_data))),
                 TBL_CHAN);
         $ps = $this->db->prepare($query);
         $ps->bindValue(':chan', $chan, PDO::PARAM_STR);
@@ -597,9 +608,10 @@ class Denora implements Service {
      * @return int code (200: OK, 404: not existing, 403: denied)
      */
     public function checkChannel($chan) {
-        $noshow = array();
+        $noshow = [];
         $no = explode(",", $this->cfg->hide_chans);
-        for ($i = 0; $i < count($no); $i++) {
+        $counter = count($no);
+        for ($i = 0; $i < $counter; $i++) {
             $noshow[$i] = strtolower($no[$i]);
         }
         if (in_array(strtolower($chan), $noshow))
@@ -613,19 +625,17 @@ class Denora implements Service {
 
         if (!$data) {
             return 404;
-        } else {
-            if ($this->cfg->block_schans && Protocol::chan_secret_mode && @$data[self::getSqlMode(Protocol::chan_secret_mode)] == 'Y' ) {
-                return 403;
-            }
-            if ($this->cfg->block_pchans && Protocol::chan_private_mode && @$data[self::getSqlMode(Protocol::chan_private_mode)] == 'Y' ) {
-                return 403;
-            }
-            if (@$data['mode_li'] == "Y" || @$data['mode_lk'] == "Y" || @$data['mode_uo'] == "Y") {
-                return 403;
-            } else {
-                return 200;
-            }
         }
+        if ($this->cfg->block_schans && Protocol::chan_secret_mode && @$data[self::getSqlMode(Protocol::chan_secret_mode)] == 'Y' ) {
+            return 403;
+        }
+        if ($this->cfg->block_pchans && Protocol::chan_private_mode && @$data[self::getSqlMode(Protocol::chan_private_mode)] == 'Y' ) {
+            return 403;
+        }
+        if (@$data['mode_li'] == "Y" || @$data['mode_lk'] == "Y" || @$data['mode_uo'] == "Y") {
+            return 403;
+        }
+        return 200;
     }
 
     /**
@@ -638,7 +648,7 @@ class Denora implements Service {
         $ps = $this->db->prepare($query);
         $ps->bindValue(':channel', $chan, PDO::PARAM_STR);
         $ps->execute();
-        return $ps->fetch(PDO::FETCH_COLUMN) ? true : false;
+        return (bool) $ps->fetch(PDO::FETCH_COLUMN);
     }
 
     /**
@@ -675,7 +685,7 @@ class Denora implements Service {
      * @todo refactor
      */
     public function getChannelGlobalActivity($type, $datatables = false) {
-        $aaData = array();
+        $aaData = [];
         $secret_mode = Protocol::chan_secret_mode;
         $private_mode = Protocol::chan_private_mode;
 
@@ -699,11 +709,11 @@ class Denora implements Service {
             smileys, kicks, modes, topics FROM `%s` AS cs
             JOIN `%s` AS c ON BINARY LOWER(cs.chan) = LOWER(c.channel) WHERE cs.type = :type AND %s",
             TBL_CSTATS, TBL_CHAN, $where);
-        $type = self::getDenoraChanstatsType($type);
+        $type = $this->getDenoraChanstatsType($type);
         if ($datatables) {
-            $total = $this->db->datatablesTotal($query, array(':type' => (int) $type));
-            $filtering = $this->db->datatablesFiltering(array('cstats.chan', 'chan.topic'));
-            $ordering = $this->db->datatablesOrdering();
+            $total = $this->db->datatablesTotal($query, [':type' => (int) $type]);
+            $filtering = $this->db->datatablesFiltering(['cstats.chan', 'chan.topic']);
+            $ordering = $this->db->datatablesOrdering(['name' => 'name', 'letters' => 'letters', 'words' => 'words', 'lines' => 'lines', 'actions' => 'actions', 'smileys' => 'smileys', 'kicks' => 'kicks', 'modes' => 'modes', 'topics' => 'topics']);
             $paging = $this->db->datatablesPaging();
             $query .= sprintf("%s %s %s", $filtering ? " AND " . $filtering : "", $ordering, $paging);
         }
@@ -732,14 +742,14 @@ class Denora implements Service {
      * @todo refactor
      */
     public function getChannelActivity($chan, $type, $datatables = false) {
-        $aaData = array();
+        $aaData = [];
         $query = sprintf("SELECT SQL_CALC_FOUND_ROWS uname, letters, words, line AS 'lines', actions,
         smileys, kicks, modes, topics FROM `%s` WHERE chan = :channel AND type = :type AND letters > 0 ", TBL_USTATS);
-        $type = self::getDenoraChanstatsType($type);
+        $type = $this->getDenoraChanstatsType($type);
         if ($datatables) {
-            $total = $this->db->datatablesTotal($query, array(':type' => (int) $type, ':channel' => $chan));
-            $filtering = $this->db->datatablesFiltering(array('uname'));
-            $ordering = $this->db->datatablesOrdering();
+            $total = $this->db->datatablesTotal($query, [':type' => (int) $type, ':channel' => $chan]);
+            $filtering = $this->db->datatablesFiltering(['uname']);
+            $ordering = $this->db->datatablesOrdering(['uname' => 'uname', 'letters' => 'letters', 'words' => 'words', 'lines' => 'lines', 'actions' => 'actions', 'smileys' => 'smileys', 'kicks' => 'kicks', 'modes' => 'modes', 'topics' => 'topics']);
             $paging = $this->db->datatablesPaging();
             $query .= sprintf("%s %s %s", $filtering ? " AND " . $filtering : "", $ordering, $paging);
         }
@@ -780,7 +790,7 @@ class Denora implements Service {
             time13, time14, time15, time16, time17, time18, time19, time20, time21, time22, time23
             FROM `%s` WHERE chan = :channel AND type = :type", TBL_CSTATS);
         $ps = $this->db->prepare($query);
-        $ps->bindValue(':type',  self::getDenoraChanstatsType($type), PDO::PARAM_INT);
+        $ps->bindValue(':type',  $this->getDenoraChanstatsType($type), PDO::PARAM_INT);
         $ps->bindValue(':channel', $chan == null ? 'global' : $chan, PDO::PARAM_STR);
         $ps->execute();
         $result = $ps->fetch(PDO::FETCH_NUM);
@@ -789,9 +799,8 @@ class Denora implements Service {
                 $result[$key] = (int) $val;
             }
             return $result;
-        } else {
-            return null;
         }
+        return null;
     }
 
     /**
@@ -802,16 +811,16 @@ class Denora implements Service {
      * @todo refactor
      */
     public function getUserGlobalActivity($type, $datatables = false) {
-        $aaData = array();
+        $aaData = [];
 
         $query = sprintf("SELECT SQL_CALC_FOUND_ROWS uname, letters, words, line AS 'lines',
             actions, smileys, kicks, modes, topics FROM `%s`
             WHERE type = :type AND letters > 0 and chan = 'global'", TBL_USTATS);
-        $type = self::getDenoraChanstatsType($type);
+        $type = $this->getDenoraChanstatsType($type);
         if ($datatables) {
-            $total = $this->db->datatablesTotal($query, array(':type' => $type));
-            $filtering = $this->db->datatablesFiltering(array('uname'));
-            $ordering = $this->db->datatablesOrdering();
+            $total = $this->db->datatablesTotal($query, [':type' => $type]);
+            $filtering = $this->db->datatablesFiltering(['uname']);
+            $ordering = $this->db->datatablesOrdering(['uname' => 'uname', 'letters' => 'letters', 'words' => 'words', 'lines' => 'lines', 'actions' => 'actions', 'smileys' => 'smileys', 'kicks' => 'kicks', 'modes' => 'modes', 'topics' => 'topics']);
             $paging = $this->db->datatablesPaging();
             $query .= sprintf("%s %s %s", $filtering ? " AND " . $filtering : "", $ordering, $paging);
         }
@@ -864,7 +873,7 @@ class Denora implements Service {
             time13, time14, time15, time16, time17, time18, time19, time20, time21, time22, time23
             FROM `%s` WHERE uname = :uname AND chan = :channel AND type = :type", TBL_USTATS);
         $ps = $this->db->prepare($query);
-        $ps->bindValue(':type',  self::getDenoraChanstatsType($type), PDO::PARAM_INT);
+        $ps->bindValue(':type',  $this->getDenoraChanstatsType($type), PDO::PARAM_INT);
         $ps->bindValue(':channel', $chan == null ? 'global' : $chan, PDO::PARAM_STR);
         $ps->bindValue(':uname', $info['uname'], PDO::PARAM_STR);
         $ps->execute();
@@ -874,9 +883,8 @@ class Denora implements Service {
                 $result[$key] = (int) $val;
             }
             return $result;
-        } else {
-            return null;
         }
+        return null;
     }
 
     /**
@@ -894,7 +902,7 @@ class Denora implements Service {
         $ps = $this->db->prepare($query);
         $ps->bindValue(':user', $user, SQL_STR);
         $ps->execute();
-        return $ps->fetch(PDO::FETCH_COLUMN) ? true : false;
+        return (bool) $ps->fetch(PDO::FETCH_COLUMN);
     }
 
     /**
@@ -911,7 +919,7 @@ class Denora implements Service {
         $ps = $this->db->prepare($query);
         $ps->bindValue(':user', $user, PDO::PARAM_STR);
         $ps->execute();
-        return $ps->fetch(PDO::FETCH_COLUMN) ? true : false;
+        return (bool) $ps->fetch(PDO::FETCH_COLUMN);
     }
 
     /**
@@ -924,11 +932,11 @@ class Denora implements Service {
         $uname = ($mode == "stats") ? $user : $this->getUnameFromNick($user);
         $aliases = $this->getUnameAliases($uname);
         if (!$aliases) {
-            $aliases = array($uname ? $uname : $user);
+            $aliases = [$uname ?: $user];
         }
         $nick = ($mode == "stats") ? $aliases[0] : $user;
         array_shift($aliases);
-        return array('nick' => $nick, 'uname' => $uname, 'aliases' => $aliases);
+        return ['nick' => $nick, 'uname' => $uname, 'aliases' => $aliases];
     }
 
     /**
@@ -944,7 +952,7 @@ class Denora implements Service {
             u.lastquit AS quit_time, u.lastquitmsg AS quit_msg, u.countrycode AS country_code, u.country, s.uline AS service, %s,
             s.country AS server_country, s.countrycode AS server_country_code
             FROM `%s` AS u LEFT JOIN `%s` AS s ON s.servid = u.servid WHERE u.nick = :nickname",
-            implode(',', array_map(array('Denora', 'getSqlMode'), str_split(Protocol::user_modes))),
+            implode(',', array_map(['Denora', 'getSqlMode'], str_split(Protocol::user_modes))),
             TBL_USER, TBL_SERVER);
         $ps = $this->db->prepare($query);
         $ps->bindValue(':nickname', $info['nick'], PDO::PARAM_STR);
@@ -954,9 +962,8 @@ class Denora implements Service {
             $user->uname = $info['uname'];
             $user->aliases = $info['aliases'];
             return $user;
-        } else {
-            return null;
         }
+        return null;
     }
 
     /**
@@ -1032,13 +1039,12 @@ class Denora implements Service {
         if (is_array($data)) {
             foreach ($data as $key => $type) {
                 foreach ($type as $field => $val) {
-                    $data[$key][$field] = ($field == 'type') ? self::getAnopeChanstatsType($val) : (int) $val;
+                    $data[$key][$field] = ($field == 'type') ? $this->getAnopeChanstatsType($val) : (int) $val;
                 }
             }
             return $data;
-        } else {
-            return null;
         }
+        return null;
     }
 
     /**
@@ -1077,16 +1083,14 @@ class Denora implements Service {
      * @param string $type
      * @return int
      */
-    private static function getDenoraChanstatsType($type) {
-        switch ($type) {
-            case 'daily':
-                return 1;
-            case 'weekly':
-                return 2;
-            case 'monthly':
-                return 3;
-        }
-        return 0;
+    private function getDenoraChanstatsType($type)
+    {
+        return match ($type) {
+            'daily' => 1,
+            'weekly' => 2,
+            'monthly' => 3,
+            default => 0,
+        };
     }
 
     /**
@@ -1094,16 +1098,14 @@ class Denora implements Service {
      * @param int $type
      * @return string
      */
-    private static function getAnopeChanstatsType($type) {
-        switch ($type) {
-            case 1:
-                return 'daily';
-            case 2:
-                return 'weekly';
-            case 3:
-                return 'monthly';
-        }
-        return 'total';
+    private function getAnopeChanstatsType($type)
+    {
+        return match ($type) {
+            1 => 'daily',
+            2 => 'weekly',
+            3 => 'monthly',
+            default => 'total',
+        };
     }
 
 }

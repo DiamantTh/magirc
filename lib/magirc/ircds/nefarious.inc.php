@@ -1,6 +1,8 @@
 <?php
-// Nefarious 13 protocol file for Magirc
 
+declare(strict_types=1);
+
+// Nefarious 13 protocol file for Magirc
 class Protocol {
     const ircd = 'nefarious';
 
@@ -9,7 +11,7 @@ class Protocol {
     const user_modes = 'acdfghiknoqrsxwzBCDHILORWX';
 
     const oper_hidden_mode = 'H';
-    public static $oper_levels = array();
+    public static $oper_levels = [];
     const helper_mode = '';
     const bot_mode = 'B';
     const services_protection_mode = 'k';
@@ -23,5 +25,3 @@ class Protocol {
     const line_g = false;
     const host_cloaking = true;
 }
-
-?>

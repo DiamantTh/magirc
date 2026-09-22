@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="vendor/autoload.php" cacheDirectory="tmp/phpunit-cache" colors="true">
+    <testsuites>
+        <testsuite name="MagIRC regression tests">
+            <file>tests/ModernizationTest.php</file>
+        </testsuite>
+        <testsuite name="MagIRC integration tests">
+            <directory suffix="Test.php">tests/Integration</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>
