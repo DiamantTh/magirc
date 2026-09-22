@@ -1,0 +1,37 @@
+<h1>{% trans "Server history" %}</h1>
+<div id="chart-history" style="height: 350px; min-width: 700px"></div>
+
+<script type="text/javascript">
+$(document).ready(function() {
+    $.getJSON('rest/service.php/servers/history', function(data) {
+        var chart = mmEchartsInit('chart-history');
+        if (!chart) return;
+        chart.setOption({
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'time' },
+            yAxis: { min: 0 },
+            dataZoom: [
+                { type: 'inside', throttle: 50 },
+                {
+                    type: 'slider',
+                    height: 24,
+                    bottom: 8,
+                    borderColor: 'rgba(255,255,255,0.06)',
+                    backgroundColor: 'rgba(255,255,255,0.04)',
+                    fillerColor: 'rgba(255,255,255,0.12)',
+                    handleSize: '90%',
+                    handleStyle: { color: 'rgba(255,255,255,0.35)' },
+                    textStyle: { color: 'rgba(255,255,255,0.6)' }
+                }
+            ],
+            series: [{
+                name: mLang.ServersOnline,
+                type: 'line',
+                showSymbol: false,
+                step: 'end',
+                data: data
+            }]
+        });
+    });
+});
+</script>

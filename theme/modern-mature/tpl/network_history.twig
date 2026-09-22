@@ -1,0 +1,50 @@
+<h1>{% trans "Network Usage History" %}</h1>
+<div id="chart-history" style="height: 350px; min-width: 700px"></div>
+
+<script type="text/javascript">
+$(document).ready(function() {
+    var seriesOptions = [],
+        seriesCounter = 0,
+        names = ['servers', 'channels', 'users'],
+        namesLang = { 'servers': mLang.Servers, 'channels': mLang.Channels, 'users': mLang.Users };
+
+    $.each(names, function(i, name) {
+        $.getJSON('rest/service.php/'+ name.toLowerCase() +'/history', function(data) {
+            seriesOptions[i] = { name: namesLang[name], data: data };
+            seriesCounter++;
+            if (seriesCounter == names.length) {
+                createChart();
+            }
+        });
+    });
+
+    function createChart() {
+        var chart = mmEchartsInit('chart-history');
+        if (!chart) return;
+        chart.setOption({
+            tooltip: { trigger: 'axis' },
+            legend: { data: seriesOptions.map(function(s) { return s.name; }) },
+            xAxis: { type: 'time' },
+            yAxis: { min: 0 },
+            dataZoom: [
+                { type: 'inside', throttle: 50 },
+                {
+                    type: 'slider',
+                    height: 24,
+                    bottom: 8,
+                    borderColor: 'rgba(255,255,255,0.06)',
+                    backgroundColor: 'rgba(255,255,255,0.04)',
+                    fillerColor: 'rgba(255,255,255,0.12)',
+                    handleSize: '90%',
+                    handleStyle: { color: 'rgba(255,255,255,0.35)' },
+                    textStyle: { color: 'rgba(255,255,255,0.6)' }
+                }
+            ],
+            series: seriesOptions.map(function(s) {
+                return { name: s.name, type: 'line', showSymbol: false, data: s.data };
+            })
+        });
+    }
+
+});
+</script>

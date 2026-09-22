@@ -1,0 +1,78 @@
+<h1>{% trans %}Current Country Statistics for {{ target }}{% endtrans %}</h1>
+<div id="chart-countries" style="min-width: 700px; height: 400px; margin: 0 auto"></div>
+
+<table id="tbl_countries" class="display">
+    <thead>
+        <tr><th>{% trans "Country" %}</th><th>{% trans "Count" %}</th></tr>
+    </thead>
+    <tbody>
+        <tr><td colspan="2">{% trans "Loading" %}...</td></tr>
+    </tbody>
+</table>
+
+<script type="text/javascript">
+$(document).ready(function() {
+    if (refresh_interval > 0) {
+        setInterval(updateContent, refresh_interval);
+    }
+    function updateContent() {
+        loadContent();
+        table_countries.reload();
+    }
+    function loadContent() {
+        $.getJSON('rest/service.php/servers/'+target+'/countries/percent', function(data) {
+            var norm = $.map(data || [], function(p) {
+                var raw = (p.value != null) ? p.value : p.y;
+                var num = Number(raw);
+                return {
+                    name: p.name || p.country || p.label || 'Unknown',
+                    value: isNaN(num) ? 0 : num,
+                    count: p.count
+                };
+            });
+            if (pie_countries) pie_countries.setOption({ series: [{ data: norm }] });
+        });
+    }
+    var pie_countries = mmEchartsInit('chart-countries');
+    if (pie_countries) {
+        pie_countries.setOption({
+            tooltip: {
+                trigger: 'item',
+                formatter: function(p) {
+                    return '<b>'+ p.name +'<\/b>: '+ p.value +' %'+' (' + (p.data && p.data.count ? p.data.count : '') +')';
+                }
+            },
+            series: [{
+                type: 'pie',
+                name: mLang.CountryStatistics,
+                radius: ['0%', '70%'],
+                data: [],
+                label: {
+                    formatter: function(p) {
+                        return p.name + ': ' + p.value + '% (' + (p.data && p.data.count ? p.data.count : '') + ')';
+                    },
+                    textShadowColor: 'rgba(0,0,0,0.45)',
+                    textShadowBlur: 4
+                },
+                labelLine: {
+                    length: 12,
+                    length2: 8,
+                    lineStyle: { color: 'rgba(255,255,255,0.35)' }
+                }
+            }]
+        });
+    }
+    var table_countries = mmInitTable('#tbl_countries', {
+        pageLength: 10,
+        order: [[ 1, "desc" ]],
+        ajax: "rest/service.php/servers/"+target+"/countries?format=datatables",
+        columns: [
+            { data: "country", render: function(data, type, row, meta) {
+                return getCountryFlag(row) + ' ' + data;
+            } },
+            { data: "count" }
+        ]
+    });
+    loadContent();
+});
+</script>

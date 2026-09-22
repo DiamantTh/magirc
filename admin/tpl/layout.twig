@@ -4,13 +4,15 @@
 <title>{% block title %}MagIRC - {% endblock %}</title>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="ROBOTS" content="NOINDEX, NOFOLLOW" />
+<meta name="csrf-name" content="{{ csrf.csrf_name }}" />
+<meta name="csrf-value" content="{{ csrf.csrf_value }}" />
 <meta name="Keywords" content="MagIRC IRC Chat Statistics Denora stats phpDenora" />
 <meta name="Description" content="IRC Statistics powered by MagIRC" />
 <base href="{{ constant('BASE_URL') }}" />
 <link rel="icon" href="../favicon.ico" type="image/x-icon">
 {% block css %}
-<link href="../node_modules/jquery-ui-themes/themes/smoothness/jquery-ui.min.css" rel="stylesheet" type="text/css" />
-<link href="../node_modules/datatables.net-jqui/css/dataTables.jqueryui.min.css" rel="stylesheet" type="text/css" />
+<link href="../assets/vendor/jquery-ui/jquery-ui.min.css" rel="stylesheet" type="text/css" />
+<link href="../assets/vendor/datatables/dataTables.jqueryui.min.css" rel="stylesheet" type="text/css" />
 <link href="css/font.css" rel="stylesheet" type="text/css" />
 <link href="css/styles.css" rel="stylesheet" type="text/css" />
 {% endblock %}
@@ -33,13 +35,17 @@
 <div id="footer">powered by <a href="https://h9k.github.io/magirc/">MagIRC</a> v{{ constant('VERSION_FULL') }}-{{ cfg.service }}</div>
 {% endblock %}
 {% block js %}
-<script type="text/javascript" src="../node_modules/jquery/dist/jquery.min.js"></script>
-<script type="text/javascript" src="../node_modules/jquery-ui-dist/jquery-ui.min.js"></script>
-<script type="text/javascript" src="../node_modules/datatables.net/js/jquery.dataTables.min.js"></script>
-<script type="text/javascript" src="../node_modules/jquery-form/src/jquery.form.js"></script>
+<script type="text/javascript" src="../assets/vendor/jquery/jquery.min.js"></script>
+<script type="text/javascript" src="../assets/vendor/jquery-ui/jquery-ui.min.js"></script>
+<script type="text/javascript" src="../assets/vendor/datatables/jquery.dataTables.min.js"></script>
+<script type="text/javascript" src="../assets/vendor/jquery-form/jquery.form.js"></script>
 <script type="text/javascript">
 var url_base = '{{ constant('BASE_URL') }}';
 $(document).ready(function() {
+    $.ajaxSetup({ beforeSend: function(xhr) {
+        xhr.setRequestHeader('csrf_name', $('meta[name="csrf-name"]').attr('content'));
+        xhr.setRequestHeader('csrf_value', $('meta[name="csrf-value"]').attr('content'));
+    }});
     $("#loading").ajaxStart(function(){
         $(this).show();
     }).ajaxStop(function(){

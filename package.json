@@ -20,5 +20,16 @@
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"
+  },
+  "devDependencies": {
+    "@tiptap/core": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
+    "esbuild": "^0.25.0"
+  },
+  "scripts": {
+    "build:editor": "esbuild admin/js/welcome-editor.js --bundle --format=iife --outfile=admin/js/welcome-editor.bundle.js",
+    "build:runtime": "node scripts/build-runtime-assets.mjs",
+    "test:editor": "node tests/frontend/editor-bundle-test.mjs",
+    "test:runtime-assets": "node tests/frontend/runtime-assets-test.mjs"
   }
 }

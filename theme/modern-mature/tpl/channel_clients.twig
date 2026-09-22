@@ -1,0 +1,131 @@
+<h1>{% trans %}Current Client Statistics for {{ target }}{% endtrans %}</h1>
+
+<div id="chart-clients" style="min-width: 700px; height: 400px; margin: 0 auto"></div>
+
+<table id="tbl_clients" class="display">
+    <thead>
+        <tr><th>{% trans "Client" %}</th><th>{% trans "Count" %}</th></tr>
+    </thead>
+    <tbody>
+        <tr><td colspan="2">{% trans "Loading" %}...</td></tr>
+    </tbody>
+</table>
+
+<script type="text/javascript">
+$(document).ready(function() {
+    if (refresh_interval > 0) {
+        setInterval(updateContent, refresh_interval);
+    }
+    function updateContent() {
+        loadContent();
+        table_clients.reload();
+    }
+    function loadContent() {
+        $.getJSON('rest/service.php/channels/'+target+'/clients/percent', function(data) {
+            var colors = mmChartColors();
+            var clientData = $.map(data.clients || [], function(p) {
+                var raw = (p.value != null) ? p.value : p.y;
+                var num = Number(raw);
+                return {
+                    name: p.name || p.client || 'Unknown',
+                    value: isNaN(num) ? 0 : num,
+                    count: p.count,
+                    version: p.version
+                };
+            });
+            var versionData = $.map(data.versions || [], function(p) {
+                var raw = (p.value != null) ? p.value : p.y;
+                var num = Number(raw);
+                return {
+                    name: p.name || p.client || p.cat || 'Unknown',
+                    value: isNaN(num) ? 0 : num,
+                    count: p.count,
+                    version: p.version,
+                    cat: p.cat
+                };
+            });
+            var i = 0, j = 0, name = '';
+            $.each(clientData, function(key, value) {
+                clientData[key].itemStyle = { color: colors[i++] };
+                if (i > 8) i = 0;
+            });
+            i = -1;
+            $.each(versionData, function(key, value) {
+                if (name != value.cat) {
+                    name = value.cat;
+                    i++;
+                    j = 0;
+                }
+                var brightness = 0.2 - (j / 10 / 5);
+                versionData[key].itemStyle = { color: mmShadeColor(colors[i], brightness) };
+                if (i > 8) i = 0;
+                j++;
+            });
+            if (pie_clients) pie_clients.setOption({ series: [{ data: clientData }, { data: versionData }] });
+        });
+    }
+    var pie_clients = mmEchartsInit('chart-clients');
+    if (pie_clients) {
+        pie_clients.setOption({
+            tooltip: {
+                trigger: 'item',
+                formatter: function(p) {
+                    var name = p.data && p.data.version ? (p.name + ' ' + p.data.version) : p.name;
+                    return '<b>'+ name +'<\/b>: '+ p.value +'%'+' ('+(p.data && p.data.count ? p.data.count : '')+')';
+                }
+            },
+            series: [{
+                name: 'Clients',
+                type: 'pie',
+                radius: ['0%', '60%'],
+                label: {
+                    position: 'inside',
+                    formatter: function(p) {
+                        return p.value > 5 ? p.name.substring(0, 12) : '';
+                    },
+                    color: '#ffffff',
+                    textShadowColor: 'rgba(0,0,0,0.5)',
+                    textShadowBlur: 4
+                },
+                data: []
+            }, {
+                name: 'Versions',
+                type: 'pie',
+                radius: ['60%', '80%'],
+                label: {
+                    formatter: function(p) {
+                        var client = p.name.substring(0, 12) + (p.data && p.data.version ? ' ' + p.data.version : '');
+                        if (p.value <= 1) return '';
+                        var text = client.substring(0, 30) + ': ' + p.value + '% (' + (p.data && p.data.count ? p.data.count : '') + ')';
+                        return '{glow|' + text + '}';
+                    },
+                    rich: {
+                        glow: {
+                            color: '#ffffff',
+                            fontWeight: 600,
+                            textBorderColor: 'rgba(0,0,0,0.7)',
+                            textBorderWidth: 3,
+                            textShadowColor: 'rgba(255,255,255,0.35)',
+                            textShadowBlur: 10
+                        }
+                    }
+                },
+                labelLine: { lineStyle: { color: 'rgba(255,255,255,0.6)' } },
+                data: []
+            }]
+        });
+    }
+    var table_clients = mmInitTable('#tbl_clients', {
+        pageLength: 10,
+        order: [[ 1, "desc" ]],
+        ajax: "rest/service.php/channels/"+target+"/clients?format=datatables",
+        columns: [
+            { data: "client", render: function (data) {
+                return data ? escapeTags(data) : mLang.Unknown;
+            } },
+            { data: "count" }
+        ]
+    });
+    loadContent();
+});
+</script>
