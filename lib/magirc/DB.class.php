@@ -1,5 +1,7 @@
 <?php
 
+use Psr\Log\LoggerInterface;
+
 // define the query types
 define('SQL_NONE', 1);
 define('SQL_ALL', 2);
@@ -22,12 +24,23 @@ class DB {
     private $result;
     public $error;
     public $record;
+    private ?LoggerInterface $logger = null;
 
-    function __construct($dsn, $username, $password, $args = null) {
+    private function logError(string $message, Throwable $exception): void
+    {
+        if ($this->logger instanceof LoggerInterface) {
+            $this->logger->error($message, ['exception_class' => $exception::class]);
+            return;
+        }
+        error_log($message . ' [' . $exception::class . ']');
+    }
+
+    public function __construct($dsn, $username, $password, $args = null, ?LoggerInterface $logger = null) {
+        $this->logger = $logger ?? (class_exists(\MagIRC\Logging\LoggerFactory::class) ? \MagIRC\Logging\LoggerFactory::get() : null);
         $this->connect($dsn, $username, $password, $args);
     }
 
-    function __destruct() {
+    public function __destruct() {
         $this->disconnect();
     }
 
@@ -38,38 +51,34 @@ class DB {
      * @param string $password
      * @return boolean true: successful, false: failed
      */
-    function connect($dsn, $username, $password, $args) {
-        $limit = 5;
-        $counter = 0;
-        while (true) {
-            try {
-                $args[PDO::ATTR_PERSISTENT] = true;
-                $this->pdo = @new PDO($dsn, $username, $password, $args);
-                $this->pdo->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, true);
-                $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-                $this->pdo->query("SET NAMES utf8");
-                return true;
-            } catch (Exception $e) {
-                if($e->getCode() == 2006) {
-                    $this->pdo = null;
-                    $counter++;
-                    sleep(1);
-                    if ($counter >= $limit) {
-                        $this->error = $e->getMessage();
-                        return false;
-                    }
-                } else {
-                    $this->error = $e->getMessage();
-                    return false;
-                }
-            }
+    public function connect($dsn, $username, $password, $args) {
+        $options = is_array($args) ? $args : [];
+        $options[PDO::ATTR_ERRMODE] = PDO::ERRMODE_EXCEPTION;
+        $options[PDO::ATTR_DEFAULT_FETCH_MODE] = PDO::FETCH_ASSOC;
+        $options[PDO::ATTR_EMULATE_PREPARES] = false;
+        $options[PDO::ATTR_PERSISTENT] = false;
+        if (str_starts_with($dsn, 'mysql:')) {
+            $bufferedAttribute = class_exists(\Pdo\Mysql::class)
+                ? \Pdo\Mysql::ATTR_USE_BUFFERED_QUERY
+                : PDO::MYSQL_ATTR_USE_BUFFERED_QUERY;
+            $options[$bufferedAttribute] = true;
+        }
+        try {
+            $this->pdo = new PDO($dsn, $username, $password, $options);
+            $this->error = null;
+            return true;
+        } catch (PDOException $exception) {
+            $this->pdo = null;
+            $this->logError('MagIRC database connection failed.', $exception);
+            $this->error = 'Database connection failed.';
+            return false;
         }
     }
 
     /**
      * Disconnect from the database server
      */
-    function disconnect() {
+    public function disconnect() {
         $this->pdo = null;
     }
 
@@ -77,7 +86,7 @@ class DB {
      * Get the tables
      * @return array
      */
-    function getTables() {
+    public function getTables() {
         $query = "SHOW TABLES";
         $this->query($query, SQL_ALL, SQL_INDEX);
         return $this->record;
@@ -88,7 +97,7 @@ class DB {
      * @param string $query
      * @return PDOStatement
      */
-    function prepare($query) {
+    public function prepare($query) {
         return $this->pdo->prepare($query);
     }
 
@@ -99,8 +108,9 @@ class DB {
      * @param int $format SQL_INDEX: indexed array, SQL_ASSOC: associative array, SQL_OBJ object
      * @return boolean true: success, false: failure
      */
-    function query($query, $type = SQL_NONE, $format = SQL_INDEX) {
+    public function query($query, $type = SQL_NONE, $format = SQL_INDEX) {
         try {
+            $this->record = null;
             $this->result = $this->pdo->query($query);
             switch ($type) {
                 case SQL_ALL:
@@ -113,11 +123,14 @@ class DB {
                 default:
                     break;
             }
+            $this->error = null;
             return true;
-        } catch(PDOException $e) {
-            die("<br />QUERY failure: {$query}<br />".$e->getMessage());
+        } catch(Exception $e) {
+            $this->logError('MagIRC database query failed.', $e);
+            $this->record = false;
+            $this->error = 'Database query failed.';
+            return false;
         }
-        return true;
     }
 
     /**
@@ -125,13 +138,12 @@ class DB {
      * @param int $format SQL_INDEX: indexed array, SQL_ASSOC: associative array, SQL_OBJ object
      * @return mixed record on success, false on failure
      */
-    function next($format = SQL_INDEX) {
+    public function next($format = SQL_INDEX) {
         $this->record = $this->result->fetch($format);
         if ($this->record) {
             return $this->record;
-        } else {
-            return false;
         }
+        return false;
     }
 
     /**
@@ -139,7 +151,7 @@ class DB {
      * @param string $input
      * @return string Escaped string
      */
-    function escape($input) {
+    public function escape($input) {
         return $this->pdo->quote($input);
     }
 
@@ -147,7 +159,7 @@ class DB {
      * Get the ID of the last inserted row
      * @return int ID
      */
-    function lastInsertID() {
+    public function lastInsertID() {
         return $this->pdo->lastInsertId();
     }
 
@@ -155,11 +167,12 @@ class DB {
      * Number of returned rows
      * @return int Count
      */
-    function numRows() {
+    public function numRows() {
         try {
             return $this->result->rowCount();
-        } catch(PDOException $e) {
-            die($e->getMessage());
+        } catch(Exception $e) {
+            $this->logError('MagIRC database row count failed.', $e);
+            return 0;
         }
     }
 
@@ -167,11 +180,12 @@ class DB {
      * Fetch the first column of the last result
      * @return mixed Value
      */
-    function fetchColumn() {
+    public function fetchColumn() {
         try {
             return $this->result->fetchColumn();
-        } catch(PDOException $e) {
-            die($e->getMessage());
+        } catch(Exception $e) {
+            $this->logError('MagIRC database fetch failed.', $e);
+            return false;
         }
     }
 
@@ -179,7 +193,7 @@ class DB {
      * Return the amount of found rows from the last query
      * @return int Rows
      */
-    function foundRows() {
+    public function foundRows() {
         $ps = $this->prepare("SELECT FOUND_ROWS()");
         $ps->execute();
         return $ps->fetch(PDO::FETCH_COLUMN);
@@ -228,7 +242,7 @@ class DB {
      * @param int $limit LIMIT ...
      * @return mixed
      */
-    function selectOne($table, $where = NULL, $sort = NULL, $order = 'ASC', $limit = 0) {
+    public function selectOne($table, $where = NULL, $sort = NULL, $order = 'ASC', $limit = 0) {
         return $this->select($table, $where, $sort, $order, $limit, SQL_INIT, $format = SQL_ASSOC);
     }
     /**
@@ -240,7 +254,7 @@ class DB {
      * @param int $limit LIMIT ...
      * @return mixed
      */
-    function selectAll($table, $where = NULL, $sort = NULL, $order = 'ASC', $limit = 0) {
+    public function selectAll($table, $where = NULL, $sort = NULL, $order = 'ASC', $limit = 0) {
         return $this->select($table, $where, $sort, $order, $limit, SQL_ALL, $format = SQL_ASSOC);
     }
 
@@ -250,7 +264,7 @@ class DB {
      * @param array $array Values (column => value)
      * @return int Last inserted ID
      */
-    function insert($table, $array) {
+    public function insert($table, $array) {
         $query = "INSERT INTO `{$table}` SET ";
 
         foreach($array as $key => $value) {
@@ -260,9 +274,8 @@ class DB {
 
         if ($this->query($query)) {
             return $this->lastInsertID();
-        } else {
-            return 0;
         }
+        return 0;
     }
 
     /**
@@ -272,7 +285,7 @@ class DB {
      * @param array $where WHERE (column => value)
      * @return mixed
      */
-    function update($table, $array, $where) {
+    public function update($table, $array, $where) {
         $data = null;
         foreach($array as $key => $value) {
             $data .= sprintf("`%s` = %s, ", $key, $this->escape($value));
@@ -296,7 +309,7 @@ class DB {
      * @param mixed $data int: id, array: (column => value)
      * @return mixed
      */
-    function delete($table, $data) {
+    public function delete($table, $data) {
         if (is_array($data)) {
             $query = "DELETE FROM `{$table}` WHERE ";
             foreach($data as $key => $value) {
@@ -315,7 +328,7 @@ class DB {
      * @param array $aParams (column => value)
      * @return mixed
      */
-    function datatablesTotal($sQuery, $aParams = array()) {
+    public function datatablesTotal($sQuery, $aParams = []) {
         $sQuery = preg_replace('#SELECT\s.*\s?FROM\s#is', 'SELECT COUNT(*) FROM ', $sQuery, 1);
         $ps = $this->prepare($sQuery);
         foreach ($aParams as $key => &$val) {
@@ -329,35 +342,53 @@ class DB {
      * Build the LIMIT portion of a query (used by DataTables)
      * @return string LIMIT statement
      */
-    function datatablesPaging() {
-        $sLimit = "";
-        if (isset($_GET['start']) && isset($_GET['length']) && $_GET['length'] != '-1') {
-            $sLimit = "LIMIT ". (int) $_GET['start'].", ". (int) $_GET['length'];
+    public function datatablesPaging() {
+        if (!isset($_GET['start'], $_GET['length']) || !is_scalar($_GET['start']) || !is_scalar($_GET['length'])) {
+            return 'LIMIT 0, 100';
         }
-        return $sLimit;
+        $start = filter_var($_GET['start'], FILTER_VALIDATE_INT);
+        $length = filter_var($_GET['length'], FILTER_VALIDATE_INT);
+        $start = ($start === false || $start < 0) ? 0 : $start;
+        $length = $length === false ? 100 : $length;
+        if ($length === -1 || $length > 500) {
+            $length = 500;
+        }
+        if ($length < 1) {
+            $length = 100;
+        }
+        return 'LIMIT ' . $start . ', ' . $length;
     }
 
     /**
      * Build the ORDER BY portion of a query (used by DataTables)
      * @return string ORDER BY statement
      */
-    function datatablesOrdering() {
-        $sOrder = "";
-        if (isset($_GET['order']) && is_array($_GET['order']) && isset($_GET['columns']) && is_array($_GET['columns'])) {
-            $sOrder = "ORDER BY ";
-            foreach ($_GET['order'] as $order){
-                $column = $order['column'];
-                if ($_GET['columns'][$column]['orderable'] == "true"){
-                    $sOrder .= "`".$_GET['columns'][$column]['data']."` ";
-                    $sOrder .= ($order['dir'] == 'desc' ? 'desc' : 'asc') .", ";
-                }
-            }
-            $sOrder = substr_replace($sOrder, "", -2);
-            if ($sOrder == "ORDER BY") {
-                $sOrder = "";
-            }
+    public function datatablesOrdering(array $allowedColumns = []) {
+        if (!$allowedColumns || !isset($_GET['order']) || !is_array($_GET['order']) || !isset($_GET['columns']) || !is_array($_GET['columns'])) {
+            return '';
         }
-        return $sOrder;
+        $parts = [];
+        foreach ($_GET['order'] as $order) {
+            if (!is_array($order) || !isset($order['column']) || !is_scalar($order['column']) || !ctype_digit((string) $order['column'])) {
+                continue;
+            }
+            $index = (int) $order['column'];
+            if (!isset($_GET['columns'][$index]) || !is_array($_GET['columns'][$index])) {
+                continue;
+            }
+            $column = $_GET['columns'][$index];
+            if (!isset($column['data']) || !is_string($column['data']) || !isset($allowedColumns[$column['data']]) || (isset($column['orderable']) && $column['orderable'] !== 'true' && $column['orderable'] !== true)) {
+                continue;
+            }
+            $identifier = $allowedColumns[$column['data']];
+            if (!is_string($identifier) || !preg_match('/^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$/D', $identifier)) {
+                continue;
+            }
+            $quoted = '`' . str_replace('.', '`.`', $identifier) . '`';
+            $direction = isset($order['dir']) && is_string($order['dir']) && strtolower($order['dir']) === 'desc' ? 'DESC' : 'ASC';
+            $parts[] = $quoted . ' ' . $direction;
+        }
+        return $parts !== [] ? 'ORDER BY ' . implode(', ', $parts) : '';
     }
 
     /**
@@ -365,25 +396,19 @@ class DB {
      * @param array $columns Column names
      * @return string WHERE statement
      */
-    function datatablesFiltering($columns = array()) {
-        $sWhere = "";
-        if (@$_GET['search']['value'] != "" && isset($_GET['columns']) && is_array($_GET['columns'])) {
-            $sWhere .= " (";
-            if (count($columns) > 0) {
-                foreach ($columns as $column){
-                    $sWhere .= "`".str_replace(".", "`.`", $column)."` LIKE ".$this->escape('%'.$_GET['search']['value'].'%')." OR ";
-                }
-            } else {
-                foreach ($_GET['columns'] as $column) {
-                    if ($column['searchable'] == "true") {
-                        $sWhere .= "`".$column['data']."` LIKE ".$this->escape('%'.$_GET['search']['value'].'%')." OR ";
-                    }
-                }
-            }
-            $sWhere = substr_replace($sWhere, "", -3);
-            $sWhere .= ')';
+    public function datatablesFiltering($columns = []) {
+        if (!$columns || !isset($_GET['search']['value']) || !is_string($_GET['search']['value']) || $_GET['search']['value'] === '') {
+            return '';
         }
-        return $sWhere;
+        $conditions = [];
+        foreach ($columns as $column) {
+            if (!is_string($column) || !preg_match('/^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$/D', $column)) {
+                continue;
+            }
+            $identifier = '`' . str_replace('.', '`.`', $column) . '`';
+            $conditions[] = $identifier . ' LIKE ' . $this->escape('%' . $_GET['search']['value'] . '%');
+        }
+        return $conditions !== [] ? '(' . implode(' OR ', $conditions) . ')' : '';
     }
 
     /**
@@ -393,13 +418,13 @@ class DB {
      * @param array $data Data
      * @return array (draw, recordsTotal, recordsFiltered, data)
      */
-    function datatablesOutput($recordsTotal, $recordsFiltered, $data) {
-        return array(
-            'draw' => (int) @$_GET['draw'],
+    public function datatablesOutput($recordsTotal, $recordsFiltered, $data) {
+        return [
+            'draw' => isset($_GET['draw']) && is_scalar($_GET['draw']) ? (int) $_GET['draw'] : 0,
             'recordsTotal' => (int) $recordsTotal,
             'recordsFiltered' => (int) $recordsFiltered,
             'data' => $data
-        );
+        ];
     }
 
 }

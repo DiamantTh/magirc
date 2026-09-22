@@ -4,22 +4,22 @@ class Config {
 
     public $config;
 
-    function __construct() {
+    public function __construct() {
         $this->loadConfig();
     }
 
     /**
      * Load the configuration and return it
      */
-    function loadConfig() {
-        require_once(dirname(__FILE__).'/MagircDB.php');
+    public function loadConfig() {
+        require_once(__DIR__.'/MagircDB.php');
         $db = MagircDB::getInstance();
-        $config = array();
         $data = $db->selectAll('magirc_config');
+        $this->config = [];
         foreach ($data as $item) {
             $this->config[$item['parameter']] = $item['value'];
         }
-        if (isset($config['timezone']) && !date_default_timezone_set($config['timezone'])) {
+        if (isset($this->config['timezone']) && !date_default_timezone_set($this->config['timezone'])) {
             die("ERROR: Invalid timezone setting.<br/>Please check your configuration.");
         }
     }
@@ -30,7 +30,7 @@ class Config {
      * @return string Value
      */
     public function __get($var) {
-        return isset($this->config[$var]) ? $this->config[$var] : null;
+        return $this->config[$var] ?? null;
     }
 
     /**

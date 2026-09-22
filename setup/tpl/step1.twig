@@ -4,7 +4,7 @@
 <h2>1. Requirements check</h2>
 
 <pre>Checking PHP version...{% if status.php %} <span style="color:green">Supported</span> ({{ phpversion }})
-{% else %} <span style="color:red">Not Supported</span> ({{ phpversion }}) ><br />You need at least version 5.5.0{% endif %}
+{% else %} <span style="color:red">Not Supported</span> ({{ phpversion }})<br />You need at least PHP 8.4.{% endif %}
 </pre>
 
 <pre>Checking PHP PDO mysql driver... {% if status.pdo %}<span style="color:green">Present</span>
@@ -19,15 +19,18 @@
 {% else %} <span style="color:red">Missing!</span><br />This component is required to run MagIRC. Please contact your Administrator.{% endif %}
 </pre>
 
+<pre>Checking PHP DOM and mbstring extensions... {% if status.dom and status.mbstring %}<span style="color:green">Present</span>
+{% else %} <span style="color:red">Missing!</span><br />The DOM and mbstring components are required to run MagIRC.{% endif %}
+</pre>
+
 <pre>Checking SQL configuration files...{% if status.writable %} <span style="color:green;">Writable</span>
 {% else %} <span style="color:orange;">Not writable</span>
-<br />Please copy the conf/*.cfg.dist.php files to conf/*.cfg.php<br />and chmod them to 0666.
-<br />Alternatively, chmod the conf/ directory to 0777.
-<br />If it still doesn't work don't worry, you can continue anyway.{% endif %}
+<br />The installer will save database settings as JSON in the conf directory. Existing PHP configuration files remain supported for installations created by older MagIRC versions.
+<br />Give the PHP user write access (for example directory mode 0700 with matching ownership). Do not make the directory world-writable.{% endif %}
 </pre>
 
 <pre>Checking if <em>tmp/</em> is writable... {% if status.tmp %} <span style="color:green;">Writable</span>
-{% else %} <span style="color:red;">Not writable</span><br />Please chmod the directory to 0777{% endif %}
+{% else %} <span style="color:red;">Not writable</span><br />Give the PHP user write access (for example directory mode 0700 with matching ownership).{% endif %}
 </pre>
 
 {% if not status.error %}<button class="next">Continue</button>{% endif %}

@@ -1,18 +1,28 @@
 <?php
-$status = $setup->requirementsCheck();
-if ($status['error']) die('Failure. <a href="?step=1">back</a>');
+$admins = $setup->checkAdmins();
+$error = $admins === null;
 
-$success = true;
-if (isset($_POST['username']) && isset($_POST['password'])) {
-    $ps = $setup->db->prepare("INSERT INTO `magirc_admin` SET `username` = :username, `password` = MD5(:password)");
-    $ps->bindParam(':username', $_POST['username'], PDO::PARAM_STR);
-    $ps->bindParam(':password', $_POST['password'], PDO::PARAM_STR);
-    $success = $ps->execute();
+if (isset($_POST['username']) || isset($_POST['password'])) {
+    if ($admins !== false || !$setup->createAdmin(
+        $_POST['username'] ?? null,
+        $_POST['password'] ?? null
+    )) {
+        $error = true;
+    } else {
+        Setup::markInstalled();
+        include(__DIR__ . '/step4.php');
+        return;
+    }
 }
 
-$template = $setup->tpl->loadTemplate('step3.twig');
-echo $template->render(array(
+$admins = $setup->checkAdmins();
+if ($admins === true) {
+    Setup::markInstalled();
+}
+$template = $setup->tpl->load('step3.twig');
+echo $template->render([
     'step' => 3,
-    'admins' => $setup->checkAdmins(),
-    'error' => !$success
-));
+    'admins' => $admins === true,
+    'can_create' => $admins === false,
+    'error' => $error
+]);

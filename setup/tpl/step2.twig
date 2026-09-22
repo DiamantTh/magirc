@@ -12,6 +12,7 @@
     <p>Please configure the access to the MagIRC SQL database
     <br />You can use an existing database (for example the Denora database) if you like, or use a separate one.</p>
     <form name="database" method="post" action="?step=2">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
     <table class="form">
         <tr>
             <th><label for="username">Username</label></th>
@@ -19,7 +20,7 @@
         </tr>
         <tr>
             <th><label for="password">Password</label></th>
-            <td><input type="password" name="password" id="password" value="{{ db_magirc.password }}" size="32" maxlength="128" /></td>
+            <td><input type="password" name="password" id="password" value="" placeholder="Leave blank to keep the current password" size="32" maxlength="128" /></td>
         </tr>
         <tr>
             <th><label for="database">Database Name</label></th>
@@ -64,9 +65,7 @@
         <pre>Saving configuration to file...
         {% if not status.writable %}
         <span style="color:red;">Failed</span></pre>
-        <p><strong><label for="sql_buffer">Please replace the contents of the {{ constant('MAGIRC_CFG_FILE') }} file with the text below:</label></strong></p>
-        <textarea name="sql_buffer" id="sql_buffer" cols="64" rows="8" readonly="readonly">{{ db_config }}</textarea>
-        <p>Once you are done, please <a href="?step=2">repeat this step</a></p>
+        <p>Could not save the configuration. Please ensure the conf directory is writable and try again.</p>
         {% else %}
         <span style="color:green;">Saved</span>
         {% endif %}

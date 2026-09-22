@@ -194,14 +194,12 @@ function checkAccount($account) {
     return false;
 }
 
-function getAnopeChanstatsType($type) {
-    switch ($type) {
-        case 1:
-            return 'daily';
-        case 2:
-            return 'weekly';
-        case 3:
-            return 'monthly';
-    }
-    return 'total';
+function getAnopeChanstatsType($type)
+{
+    return match ($type) {
+        1 => 'daily',
+        2 => 'weekly',
+        3 => 'monthly',
+        default => 'total',
+    };
 }

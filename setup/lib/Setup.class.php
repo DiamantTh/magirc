@@ -1,42 +1,22 @@
 <?php
 
-// Database configuration
-class Magirc_DB extends DB {
-    private static $instance = NULL;
-
-    public static function getInstance() {
-        if (is_null(self::$instance) === true) {
-            $db = array();
-            if (file_exists(__DIR__.'/../../conf/magirc.cfg.php')) {
-                include(__DIR__.'/../../conf/magirc.cfg.php');
-            } else {
-                die ('magirc.cfg.php configuration file missing');
-            }
-            $dsn = "mysql:dbname={$db['database']};host={$db['hostname']}";
-            $args = array();
-            if (isset($db['ssl']) && $db['ssl_key']) $args[PDO::MYSQL_ATTR_SSL_KEY] = $db['ssl_key'];
-            if (isset($db['ssl']) && $db['ssl_cert']) $args[PDO::MYSQL_ATTR_SSL_CERT] = $db['ssl_cert'];
-            if (isset($db['ssl']) && $db['ssl_ca']) $args[PDO::MYSQL_ATTR_SSL_CA] = $db['ssl_ca'];
-            self::$instance = new DB($dsn, $db['username'], $db['password'], $args);
-        }
-        return self::$instance;
-    }
-}
+require_once(__DIR__ . '/../../lib/magirc/ConfigStore.class.php');
+require_once(__DIR__ . '/../../lib/magirc/Security.class.php');
 
 class Setup {
     public $db;
     public $tpl;
-
-    function __construct() {
-        $loader = new Twig_Loader_Filesystem(__DIR__.'/../tpl');
-        $this->tpl = new Twig_Environment($loader, array(
+    public function __construct() {
+        $loader = new \Twig\Loader\FilesystemLoader(__DIR__.'/../tpl');
+        $this->tpl = new \Twig\Environment($loader, [
             'cache' => __DIR__ . '/../../tmp',
-            'debug' => true
-        ));
+            'debug' => false
+        ]);
+        $this->tpl->addGlobal('csrf_token', MagircSecurity::csrfToken());
 
         // We skip db connection in the first steps for check purposes
         if (@$_GET['step'] > 2) {
-            $this->db = Magirc_DB::getInstance();
+            $this->db = MagircDB::getInstance();
         }
     }
 
@@ -44,10 +24,10 @@ class Setup {
      * Makes preliminary requirements checks
      * @return array
      */
-    function requirementsCheck() {
-        $status = array('error' => false);
+    public function requirementsCheck() {
+        $status = ['error' => false];
 
-        if (version_compare("5.5.0", phpversion(), "<") == 1) {
+        if (version_compare(phpversion(), '8.4.0', '>=')) {
             $status['php'] = true;
         } else {
             $status['php'] = false;
@@ -75,21 +55,16 @@ class Setup {
             $status['error'] = true;
         }
 
-        if (file_exists(MAGIRC_CFG_FILE)) {
-            if (is_writable(MAGIRC_CFG_FILE)) {
-                $status['writable'] = true;
-            } else {
-                $status['writable'] = false;
-            }
-        } else {
-            if (@copy('../conf/magirc.cfg.dist.php', MAGIRC_CFG_FILE)) {
-                $status['writable'] = true;
-            } else {
-                $status['writable'] = false;
+        foreach (['dom', 'mbstring'] as $extension) {
+            $status[$extension] = extension_loaded($extension);
+            if (!$status[$extension]) {
+                $status['error'] = true;
             }
         }
 
-        if (is_writable('../tmp')) {
+        $status['writable'] = is_dir(MAGIRC_CONF_DIR) && is_writable(MAGIRC_CONF_DIR);
+
+        if (is_writable(__DIR__ . '/../../tmp')) {
             $status['tmp'] = true;
         } else {
             $status['tmp'] = false;
@@ -102,38 +77,40 @@ class Setup {
     /**
      *  Saves the MagIRC SQL configuration file
      */
-    function saveConfig() {
-        if (isset($_POST['savedb'])) {
-            $ssl = isset($_POST['ssl']) ? 'true' : 'false';
-            $db_buffer =
-                    "<?php
-    \$db['username'] = '{$_POST['username']}';
-    \$db['password'] = '{$_POST['password']}';
-    \$db['database'] = '{$_POST['database']}';
-    \$db['hostname'] = '{$_POST['hostname']}';
-    \$db['port'] = '{$_POST['port']}';
-    \$db['ssl'] = $ssl;
-    \$db['ssl_key'] = '{$_POST['ssl_key']}';
-    \$db['ssl_cert'] = '{$_POST['ssl_cert']}';
-    \$db['ssl_ca'] = '{$_POST['ssl_ca']}';
-";
-            if (is_writable(MAGIRC_CFG_FILE)) {
-                $writefile = fopen(MAGIRC_CFG_FILE,"w");
-                fwrite($writefile, $db_buffer);
-                fclose($writefile);
-            }
-            return $db_buffer;
+    public function saveConfig() {
+        if (!isset($_POST['savedb'])) {
+            return false;
         }
-        return null;
+        try {
+            $config = MagircConfigStore::load('magirc', MAGIRC_CONF_DIR);
+        } catch (Throwable) {
+            $config = MagircConfigStore::defaults('magirc');
+        }
+        foreach (['username', 'password', 'database', 'hostname', 'ssl_key', 'ssl_cert', 'ssl_ca'] as $field) {
+            $value = isset($_POST[$field]) && is_string($_POST[$field]) ? $_POST[$field] : $config[$field];
+            if ($field === 'password' && $value === '' && $config[$field] !== '') {
+                continue;
+            }
+            $config[$field] = $field === 'password' ? $value : trim($value);
+        }
+        $config['port'] = isset($_POST['port']) && is_scalar($_POST['port']) ? (string) $_POST['port'] : (string) $config['port'];
+        $config['ssl'] = isset($_POST['ssl']);
+        $saved = MagircConfigStore::save('magirc', MAGIRC_CONF_DIR, $config);
+        if ($saved && !is_file(MAGIRC_CONF_DIR . DIRECTORY_SEPARATOR . '.installed')) {
+            self::markSetupPending();
+        }
+        return $saved;
     }
 
     /**
      * Checks if the configuration table is there
      * @return PDOStatement Configuration
      */
-    function configCheck() {
+    public function configCheck() {
         $query = "SHOW TABLES LIKE 'magirc_config'";
-        $this->db->query($query, SQL_INIT);
+        if (!$this->db->query($query, SQL_INIT)) {
+            throw new RuntimeException('Database schema check failed.');
+        }
         return $this->db->record;
     }
 
@@ -142,7 +119,7 @@ class Setup {
      * @return int Version
      */
     private function getDbVersion() {
-        $result = $this->db->selectOne('magirc_config', array('parameter' => 'db_version'));
+        $result = $this->db->selectOne('magirc_config', ['parameter' => 'db_version']);
         return $result['value'];
     }
 
@@ -150,12 +127,15 @@ class Setup {
      * Loads the configuration table schema to the Denora database, for fresh installs
      * @return boolean
      */
-    function configDump() {
-        $file_content = file('sql/schema.sql');
+    public function configDump() {
+        $file_content = file(__DIR__ . '/../sql/schema.sql');
+        if ($file_content === false) {
+            throw new RuntimeException('MagIRC database schema file is missing.');
+        }
         $query = "";
         foreach($file_content as $sql_line) {
             $tsl = trim($sql_line);
-            if (($sql_line != "") && (substr($tsl, 0, 2) != "--") && (substr($tsl, 0, 1) != "#")) {
+            if (($sql_line !== "") && (!str_starts_with($tsl, "--")) && (!str_starts_with($tsl, "#"))) {
                 $query .= $sql_line;
                 if(preg_match("/;\s*$/", $sql_line)) {
                     $query = str_replace(";", "", "$query");
@@ -174,106 +154,106 @@ class Setup {
      * Generates the base url
      * @return string
      */
-    function generateBaseUrl() {
+    public function generateBaseUrl() {
         $base_url = @$_SERVER['HTTPS'] ? 'https://' : 'http://';
         $base_url .= $_SERVER['SERVER_NAME'];
         $base_url .= $_SERVER['SERVER_PORT'] == 80 ? '' : ':'.$_SERVER['SERVER_PORT'];
         $base_url .= str_replace('setup/index.php', '', $_SERVER['SCRIPT_NAME']);
-        return (substr($base_url, -1) == "/") ? substr($base_url, 0, -1) : $base_url;
+        return (str_ends_with($base_url, "/")) ? substr($base_url, 0, -1) : $base_url;
     }
 
     /**
      * Upgrade the MagIRC database
      * @return boolean true: updated, false: no update needed
      */
-    function configUpgrade() {
+    public function configUpgrade() {
         $version = $this->getDbVersion();
         $updated = false;
         if ($version != DB_VERSION) {
             if ($version < 2) {
-                $this->db->insert('magirc_config', array('parameter' => 'live_interval', 'value' => 15));
-                $this->db->insert('magirc_config', array('parameter' => 'cdn_enable', 'value' => 0));
+                $this->db->insert('magirc_config', ['parameter' => 'live_interval', 'value' => 15]);
+                $this->db->insert('magirc_config', ['parameter' => 'cdn_enable', 'value' => 0]);
             }
             if ($version < 3) {
-                $this->db->insert('magirc_config', array('parameter' => 'rewrite_enable', 'value' => 0));
+                $this->db->insert('magirc_config', ['parameter' => 'rewrite_enable', 'value' => 0]);
             }
             if ($version < 4) {
-                $this->db->insert('magirc_config', array('parameter' => 'timezone', 'value' => 'UTC'));
+                $this->db->insert('magirc_config', ['parameter' => 'timezone', 'value' => 'UTC']);
             }
             if ($version < 5) {
-                $this->db->insert('magirc_config', array('parameter' => 'welcome_mode', 'value' => 'statuspage'));
+                $this->db->insert('magirc_config', ['parameter' => 'welcome_mode', 'value' => 'statuspage']);
                 $this->db->query("CREATE TABLE IF NOT EXISTS `magirc_content` (
-                    `name` varchar(16) NOT NULL default '', `text` text NOT NULL default '',
+                    `name` varchar(16) NOT NULL default '', `text` text NOT NULL,
                     PRIMARY KEY (`name`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8;");
-                $welcome_msg = $this->db->selectOne('magirc_config', array('parameter' => 'msg_welcome'));
-                $this->db->insert('magirc_content', array('name' => 'welcome', 'text' => $welcome_msg['value']));
-                $this->db->delete('magirc_config', array('parameter' => 'msg_welcome'));
+                $welcome_msg = $this->db->selectOne('magirc_config', ['parameter' => 'msg_welcome']);
+                $this->db->insert('magirc_content', ['name' => 'welcome', 'text' => $welcome_msg['value']]);
+                $this->db->delete('magirc_config', ['parameter' => 'msg_welcome']);
                 $this->db->query("ALTER TABLE `magirc_config` CHANGE `value` `value` VARCHAR( 64 ) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL DEFAULT ''");
                 $this->db->query("ALTER TABLE `magirc_config` ENGINE = InnoDB");
             }
             if ($version < 6) {
-                $this->db->insert('magirc_config', array('parameter' => 'block_spchans', 'value' => 0));
-                $this->db->insert('magirc_config', array('parameter' => 'net_roundrobin', 'value' => ''));
-                $this->db->insert('magirc_config', array('parameter' => 'service_adsense_id', 'value' => ''));
-                $this->db->insert('magirc_config', array('parameter' => 'service_adsense_channel', 'value' => ''));
-                $this->db->insert('magirc_config', array('parameter' => 'service_searchirc', 'value' => ''));
-                $this->db->insert('magirc_config', array('parameter' => 'service_netsplit', 'value' => ''));
+                $this->db->insert('magirc_config', ['parameter' => 'block_spchans', 'value' => 0]);
+                $this->db->insert('magirc_config', ['parameter' => 'net_roundrobin', 'value' => '']);
+                $this->db->insert('magirc_config', ['parameter' => 'service_adsense_id', 'value' => '']);
+                $this->db->insert('magirc_config', ['parameter' => 'service_adsense_channel', 'value' => '']);
+                $this->db->insert('magirc_config', ['parameter' => 'service_searchirc', 'value' => '']);
+                $this->db->insert('magirc_config', ['parameter' => 'service_netsplit', 'value' => '']);
             }
             if ($version < 7) {
-                $this->db->insert('magirc_config', array('parameter' => 'version_show', 'value' => '1'));
+                $this->db->insert('magirc_config', ['parameter' => 'version_show', 'value' => '1']);
             }
             if ($version < 8) {
-                $this->db->insert('magirc_config', array('parameter' => 'net_port', 'value' => '6667'));
-                $this->db->insert('magirc_config', array('parameter' => 'net_port_ssl', 'value' => ''));
-                $roundrobin = $this->db->selectOne('magirc_config', array('parameter' => 'net_roundrobin'));
+                $this->db->insert('magirc_config', ['parameter' => 'net_port', 'value' => '6667']);
+                $this->db->insert('magirc_config', ['parameter' => 'net_port_ssl', 'value' => '']);
+                $roundrobin = $this->db->selectOne('magirc_config', ['parameter' => 'net_roundrobin']);
                 if ($roundrobin['value']) {
                     $array = explode(':', $roundrobin['value']);
-                    $this->db->update('magirc_config', array('value' => $array[0]), array('parameter' => 'net_roundrobin'));
+                    $this->db->update('magirc_config', ['value' => $array[0]], ['parameter' => 'net_roundrobin']);
                     if (count($array) > 1) {
-                        $this->db->update('magirc_config', array('value' => $array[1]), array('parameter' => 'net_port'));
+                        $this->db->update('magirc_config', ['value' => $array[1]], ['parameter' => 'net_port']);
                     }
                 }
-                $this->db->insert('magirc_config', array('parameter' => 'service_webchat', 'value' => ''));
-                $this->db->insert('magirc_config', array('parameter' => 'service_mibbit', 'value' => ''));
-                $this->db->insert('magirc_config', array('parameter' => 'service_addthis', 'value' => '0'));
+                $this->db->insert('magirc_config', ['parameter' => 'service_webchat', 'value' => '']);
+                $this->db->insert('magirc_config', ['parameter' => 'service_mibbit', 'value' => '']);
+                $this->db->insert('magirc_config', ['parameter' => 'service_addthis', 'value' => '0']);
             }
             if ($version < 9) {
-                $this->db->insert('magirc_config', array('parameter' => 'denora_version', 'value' => '1.4'));
+                $this->db->insert('magirc_config', ['parameter' => 'denora_version', 'value' => '1.4']);
             }
             if ($version < 10) {
                 $this->db->query("ALTER TABLE magirc_config CHANGE value value VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL DEFAULT ''");
             }
             if ($version < 11) {
                 $base_url = $this->generateBaseUrl();
-                $this->db->insert('magirc_config', array('parameter' => 'base_url', 'value' => $base_url));
+                $this->db->insert('magirc_config', ['parameter' => 'base_url', 'value' => $base_url]);
             }
             if ($version < 13) {
-                $this->db->insert('magirc_config', array('parameter' => 'service_mibbitid', 'value' => ''));
+                $this->db->insert('magirc_config', ['parameter' => 'service_mibbitid', 'value' => '']);
             }
             if ($version < 14) {
-                $this->db->delete('magirc_config', array('parameter' => 'denora_version'));
-                $this->db->insert('magirc_config', array('parameter' => 'service', 'value' => 'denora'));
+                $this->db->delete('magirc_config', ['parameter' => 'denora_version']);
+                $this->db->insert('magirc_config', ['parameter' => 'service', 'value' => 'denora']);
             }
             if ($version < 15) {
-                $this->db->insert('magirc_config', array('parameter' => 'hide_nickaliases', 'value' => 0));
+                $this->db->insert('magirc_config', ['parameter' => 'hide_nickaliases', 'value' => 0]);
             }
             if ($version < 16) {
-                $block_spchans = $this->db->selectOne('magirc_config', array('parameter' => 'block_spchans'));
-                $this->db->insert('magirc_config', array('parameter' => 'block_schans', 'value' => $block_spchans['value']));
-                $this->db->insert('magirc_config', array('parameter' => 'block_pchans', 'value' => $block_spchans['value']));
-                $this->db->delete('magirc_config', array('parameter' => 'block_spchans'));
+                $block_spchans = $this->db->selectOne('magirc_config', ['parameter' => 'block_spchans']);
+                $this->db->insert('magirc_config', ['parameter' => 'block_schans', 'value' => $block_spchans['value']]);
+                $this->db->insert('magirc_config', ['parameter' => 'block_pchans', 'value' => $block_spchans['value']]);
+                $this->db->delete('magirc_config', ['parameter' => 'block_spchans']);
             }
             if ($version < 17) {
-                $this->db->delete('magirc_config', array('parameter' => 'service_searchirc'));
+                $this->db->delete('magirc_config', ['parameter' => 'service_searchirc']);
             }
             if ($version < 18) {
                 $base_url = $this->generateBaseUrl();
-                $this->db->update('magirc_config', array('value' => $base_url), array('parameter' => 'base_url'));
+                $this->db->update('magirc_config', ['value' => $base_url], ['parameter' => 'base_url']);
             }
             if ($version < 19) {
-                $this->db->insert('magirc_config', array('parameter' => 'service_webchat_urlencode', 'value' => 1));
+                $this->db->insert('magirc_config', ['parameter' => 'service_webchat_urlencode', 'value' => 1]);
             }
-            $this->db->update('magirc_config', array('value' => DB_VERSION), array('parameter' => 'db_version'));
+            $this->db->update('magirc_config', ['value' => DB_VERSION], ['parameter' => 'db_version']);
             $updated = true;
         }
         return $updated;
@@ -283,8 +263,112 @@ class Setup {
      * Checks if there are any admins in the admin table
      * @return boolean true: yes, false: no
      */
-    function checkAdmins() {
-        $this->db->query("SELECT id FROM magirc_admin", SQL_INIT);
-        return $this->db->record ? true : false;
+    public function checkAdmins() {
+        if (!$this->db || !$this->db->query("SELECT id FROM magirc_admin", SQL_INIT)) {
+            return null;
+        }
+        return (bool) $this->db->record;
+    }
+
+    public function hasSchema() {
+        if (!$this->db || !$this->db->query("SHOW TABLES LIKE 'magirc_config'", SQL_INIT)) {
+            return null;
+        }
+        return (bool) $this->db->record;
+    }
+
+    public static function markSetupPending()
+    {
+        if (is_file(MAGIRC_CONF_DIR . DIRECTORY_SEPARATOR . '.installed')) {
+            return false;
+        }
+        $marker = MAGIRC_CONF_DIR . DIRECTORY_SEPARATOR . '.setup_pending';
+        if (is_file($marker)) {
+            return true;
+        }
+        $handle = @fopen($marker, 'x');
+        if (!$handle) {
+            return is_file($marker);
+        }
+        fwrite($handle, "Setup in progress\n");
+        fclose($handle);
+        @chmod($marker, 0600);
+        return true;
+    }
+
+    public static function markInstalled()
+    {
+        $marker = MAGIRC_CONF_DIR . DIRECTORY_SEPARATOR . '.installed';
+        if (is_file($marker)) {
+            @unlink(MAGIRC_CONF_DIR . DIRECTORY_SEPARATOR . '.setup_pending');
+            return true;
+        }
+        $handle = @fopen($marker, 'x');
+        if (!$handle) {
+            return is_file($marker);
+        }
+        fwrite($handle, "MagIRC installed\n");
+        fclose($handle);
+        @chmod($marker, 0600);
+        @unlink(MAGIRC_CONF_DIR . DIRECTORY_SEPARATOR . '.setup_pending');
+        return true;
+    }
+
+    /**
+     * Reconcile the installation marker with the verified database state.
+     * A missing administrator always keeps setup recoverable; an unknown
+     * state (for example a database outage) changes no marker.
+     */
+    public static function reconcileInstallationMarker(?bool $admins): bool
+    {
+        if ($admins === true) {
+            return self::markInstalled();
+        }
+        if ($admins === false) {
+            @unlink(MAGIRC_CONF_DIR . DIRECTORY_SEPARATOR . '.installed');
+            return self::markSetupPending();
+        }
+        return false;
+    }
+
+    public function createAdmin($username, $password)
+    {
+        if (!is_string($username) || !is_string($password)) {
+            return false;
+        }
+        $username = trim($username);
+        if ($username === '' || strlen($username) > 128 || $password === '' || strlen($password) > 4096 || !$this->db) {
+            return false;
+        }
+        if (is_file(MAGIRC_CONF_DIR . DIRECTORY_SEPARATOR . '.installed')) {
+            return false;
+        }
+
+        $lockFile = MAGIRC_CONF_DIR . DIRECTORY_SEPARATOR . '.installing';
+        $lock = @fopen($lockFile, 'x');
+        if (!$lock) {
+            return false;
+        }
+        @chmod($lockFile, 0600);
+        try {
+            if ($this->checkAdmins() !== false) {
+                return false;
+            }
+            $statement = $this->db->prepare('INSERT INTO `magirc_admin` (`username`, `password`) VALUES (:username, :password)');
+            $hash = MagircSecurity::hashPassword($password);
+            $statement->bindValue(':username', $username, PDO::PARAM_STR);
+            $statement->bindValue(':password', $hash, PDO::PARAM_STR);
+            if (!$statement->execute()) {
+                return false;
+            }
+            self::markInstalled();
+            return true;
+        } catch (Throwable $exception) {
+            error_log('MagIRC installer failed to create an administrator: ' . $exception->getMessage());
+            return false;
+        } finally {
+            fclose($lock);
+            @unlink($lockFile);
+        }
     }
 }

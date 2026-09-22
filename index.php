@@ -1,50 +1,50 @@
 <?php
-/**
- * MagIRC - Let the magirc begin!
- * Frontend
- *
- * @author      Sebastian Vassiliou <h9k@users.noreply.github.com>
- * @copyright   2012 - 2019 Sebastian Vassiliou
- * @link        https://h9k.github.io/magirc/
- * @license     GNU GPL Version 3, see http://www.gnu.org/licenses/gpl-3.0-standalone.html
- * @version     1.7.0
- */
 
-ini_set('display_errors','on');
+declare(strict_types=1);
+
+/** MagIRC public entry point. */
+
+ini_set('display_errors', '0');
 error_reporting(E_ALL);
-ini_set('default_charset','UTF-8');
+ini_set('default_charset', 'UTF-8');
 date_default_timezone_set('UTC');
 
-if (version_compare(PHP_VERSION, '5.6.0', '<')
-    || !extension_loaded('pdo')
-    || !in_array('mysql', PDO::getAvailableDrivers())
-    || !extension_loaded('gettext')
-    || !extension_loaded('xml'))
-    die('ERROR: System requirements not met. Please run Setup.');
-if (!file_exists('conf/magirc.cfg.php')) die('ERROR: MagIRC is not configured. Please run Setup.');
-if (!is_writable('tmp/')) die('ERROR: Unable to write temporary files. Please run Setup.');
-
-// load libs
-include_once('lib/magirc/version.inc.php');
-if (file_exists('vendor/autoload.php')) {
-	require 'vendor/autoload.php';
-} else {
-	die('Please run the `composer install` command to install library dependencies. See README for more information.');
-}
-if (!file_exists('node_modules/')) {
-    die('Please run the `yarn` command to install script dependencies. See README for more information.');
+$root = __DIR__;
+if (PHP_VERSION_ID < 80400 || !extension_loaded('pdo_mysql') || !extension_loaded('gettext') || !extension_loaded('xml') || !extension_loaded('dom') || !extension_loaded('mbstring')) {
+    http_response_code(503);
+    die('ERROR: PHP 8.4+, PDO MySQL, gettext, DOM, mbstring and XML are required.');
 }
 
-require_once('lib/magirc/DB.class.php');
-require_once('lib/magirc/Config.class.php');
-require_once('lib/magirc/Magirc.class.php');
-require_once('lib/magirc/services/Service.interface.php');
-require_once('lib/magirc/objects/ServerBase.class.php');
-require_once('lib/magirc/objects/ChannelBase.class.php');
-require_once('lib/magirc/objects/UserBase.class.php');
+if (!is_file($root . '/vendor/autoload.php')) {
+    http_response_code(503);
+    die('Please run `composer install` to install application dependencies.');
+}
+require $root . '/vendor/autoload.php';
+require_once $root . '/lib/magirc/version.inc.php';
 
-$magirc = new Magirc(true);
+if (!is_file(MagircConfigStore::path('magirc', $root . '/conf')) && !is_file($root . '/conf/magirc.cfg.php')) {
+    http_response_code(503);
+    die('MagIRC is not configured. Please run Setup.');
+}
+if (!is_writable($root . '/tmp')) {
+    http_response_code(503);
+    die('Service temporarily unavailable.');
+}
+if (!is_file($root . '/assets/vendor/jquery/jquery.min.js')) {
+    http_response_code(503);
+    die('Frontend assets are not installed. Run the documented production asset build.');
+}
 
-include_once('theme/' . $magirc->cfg->theme . '/slim/routes.inc.php');
+MagircSecurity::startSession();
 
-$magirc->slim->run();
+try {
+    $magirc = new Magirc(true);
+    \MagIRC\Routes\WebRoutes::register($magirc->slim, $magirc);
+    $magirc->slim->run();
+} catch (Throwable $exception) {
+    \MagIRC\Logging\LoggerFactory::get()->critical('MagIRC application bootstrap or request dispatch failed.', ['exception_class' => $exception::class]);
+    if (!headers_sent()) {
+        http_response_code(503);
+    }
+    echo 'Service temporarily unavailable.';
+}

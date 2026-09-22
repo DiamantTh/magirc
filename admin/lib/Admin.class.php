@@ -1,29 +1,12 @@
 <?php
+require_once(__DIR__ . '/../../lib/magirc/ConfigStore.class.php');
+require_once(__DIR__ . '/../../lib/magirc/Security.class.php');
+
+use Psr\Log\LoggerInterface;
+
 // Root path
-define('PATH_ROOT', __DIR__ . '/../../');
-
-// Database configuration
-class Magirc_DB extends DB {
-    private static $instance = NULL;
-
-    public static function getInstance() {
-        if (is_null(self::$instance) === true) {
-            $db = array();
-            if (file_exists(__DIR__.'/../../conf/magirc.cfg.php')) {
-                include(__DIR__.'/../../conf/magirc.cfg.php');
-            } else {
-                die ('magirc.cfg.php configuration file missing');
-            }
-            $dsn = "mysql:dbname={$db['database']};host={$db['hostname']}";
-            $args = array();
-            if (isset($db['ssl']) && $db['ssl_key']) $args[PDO::MYSQL_ATTR_SSL_KEY] = $db['ssl_key'];
-            if (isset($db['ssl']) && $db['ssl_cert']) $args[PDO::MYSQL_ATTR_SSL_CERT] = $db['ssl_cert'];
-            if (isset($db['ssl']) && $db['ssl_ca']) $args[PDO::MYSQL_ATTR_SSL_CA] = $db['ssl_ca'];
-            self::$instance = new DB($dsn, $db['username'], $db['password'], $args);
-            if (self::$instance->error) die('Error opening the MagIRC database<br />' . self::$instance->error);
-        }
-        return self::$instance;
-    }
+if (!defined('PATH_ROOT')) {
+    define('PATH_ROOT', __DIR__ . '/../../');
 }
 
 class Admin {
@@ -31,46 +14,73 @@ class Admin {
     public $tpl;
     public $db;
     public $cfg;
+    private ?LoggerInterface $logger = null;
 
-    function __construct() {
-        $this->db = Magirc_DB::getInstance();
+    public function __construct(?LoggerInterface $logger = null) {
+        $this->db = MagircDB::getInstance();
         $this->cfg = new Config();
-        $configuration = [
-            'settings' => [
-                'displayErrorDetails' => $this->cfg->debug_mode > 0,
-            ],
-        ];
-        $container = new \Slim\Container($configuration);
-        $container['view'] = function ($c) {
-            $view = new \Slim\Views\Twig(__DIR__ . '/../tpl', [
-                'cache' => __DIR__ . '/../../tmp',
-                'debug' => $this->cfg->debug_mode > 0
-            ]);
-            $view->addExtension(new \Slim\Views\TwigExtension(
-                $c['router'],
-                $c['request']->getUri()
-            ));
-            $engine = new Aptoma\Twig\Extension\MarkdownEngine\MichelfMarkdownEngine();
-            $view->addExtension(new \Aptoma\Twig\Extension\MarkdownExtension($engine));
-            return $view;
-        };
-        $container['notFoundHandler'] = function ($c) {
-            return function ($request, $response) use ($c) {
-                return $c['view']->render($response, 'error.twig', [
-                    "err_code" => 404
-                ])->withStatus(404);
-            };
-        };
-        $container['errorHandler'] = function ($c) {
-            return function ($request, $response, $exception) use ($c) {
-                return $c['view']->render($response, 'error_fatal.twig', [
-                    'err_msg' => $exception->getMessage(),
-                    'err_extra' => nl2br($exception->getTraceAsString()),
-                    'server' => $_SERVER
-                ])->withStatus(500);
-            };
-        };
-        $this->slim = new \Slim\App($container);
+        $container = new \DI\Container();
+        \Slim\Factory\AppFactory::setContainer($container);
+        $this->slim = \Slim\Factory\AppFactory::create();
+        $logger = $this->logger = $logger ?? \MagIRC\Logging\LoggerFactory::get();
+        $container->set(\Psr\Log\LoggerInterface::class, $logger);
+        $scriptName = (string) ($_SERVER['SCRIPT_NAME'] ?? '/admin/index.php');
+        $basePath = trim($scriptName, '/');
+        if ($basePath !== '') {
+            $this->slim->setBasePath('/' . $basePath);
+        }
+
+        $this->tpl = \Slim\Views\Twig::create(__DIR__ . '/../tpl', [
+            'cache' => __DIR__ . '/../../tmp/twig',
+            'debug' => false,
+            'autoescape' => 'html',
+        ]);
+        $this->tpl->addExtension(new \MagIRC\Twig\MarkdownExtension());
+        $this->tpl->addExtension(new \MagIRC\Twig\TranslationExtension());
+        $container->set('view', $this->tpl);
+        $container->set(\Slim\Views\Twig::class, $this->tpl);
+
+        $this->slim->add(\Slim\Views\TwigMiddleware::create($this->slim, $this->tpl));
+
+        $guard = new \Slim\Csrf\Guard(
+            $this->slim->getResponseFactory(),
+            'csrf',
+            null,
+            function ($request, $handler) {
+                $response = $this->slim->getResponseFactory()->createResponse(403);
+                $response->getBody()->write('Forbidden');
+                return $response->withHeader('Content-Type', 'text/plain; charset=utf-8');
+            },
+            200,
+            16,
+            true
+        );
+        $this->slim->add($guard);
+        $this->slim->add(new \MagIRC\Http\CsrfTokenMiddleware($guard, $this->tpl->getEnvironment()));
+        $this->slim->add(new \MagIRC\Http\NoStoreMiddleware());
+        $this->slim->addBodyParsingMiddleware();
+        $this->slim->addRoutingMiddleware();
+
+        $errors = $this->slim->addErrorMiddleware(false, true, true);
+        $errors->setDefaultErrorHandler(function ($request, $exception, $displayErrorDetails, $logErrors, $logErrorDetails, $logMessage) use ($logger) {
+            $logger->error('MagIRC admin request failed.', ['exception_class' => $exception::class]);
+            $status = $exception instanceof \Slim\Exception\HttpNotFoundException ? 404 : ($exception instanceof \Slim\Exception\HttpMethodNotAllowedException ? 405 : 500);
+            $response = $this->slim->getResponseFactory()->createResponse($status);
+            try {
+                if ($status === 404 || $status === 405) {
+                    return $this->tpl->render($response, 'error.twig', ['err_code' => $status]);
+                }
+                return $this->tpl->render($response, 'error_fatal.twig', [
+                    'err_msg' => 'An internal error occurred.',
+                    'err_extra' => '',
+                    'server' => [],
+                ]);
+            } catch (Throwable $renderException) {
+                $logger->error('MagIRC admin error template failed.', ['exception_class' => $renderException::class]);
+                $response->getBody()->write('Service temporarily unavailable.');
+                return $response->withStatus(500)->withHeader('Content-Type', 'text/plain; charset=utf-8');
+            }
+        });
     }
 
     /**
@@ -79,24 +89,38 @@ class Admin {
      * @param string $password
      * @return boolean true: successful, false: failed
      */
-    function login($username, $password) {
-        if (!isset($username) || !isset($password)) {
+    public function login($username, $password) {
+        if (!is_string($username) || !is_string($password) || $username === '' || $password === '') {
             return false;
         }
-        if ($this->db->selectOne('magirc_admin', array('username' => trim($username), 'password' => md5(trim($password))))) {
-            $_SESSION['username'] = $_POST['username'];
-            $_SESSION["ipaddr"] = $_SERVER["REMOTE_ADDR"];
-            return true;
-        } else {
+        $username = trim($username);
+        if ($username === '') {
             return false;
         }
+        $account = $this->db->selectOne('magirc_admin', ['username' => $username]);
+        if (!$account || empty($account['password']) || !MagircSecurity::verifyPassword($password, $account['password'])) {
+            return false;
+        }
+        if (preg_match('/^[a-f0-9]{32}$/iD', $account['password'])) {
+            $hash = MagircSecurity::hashPassword(trim($password));
+            if ($hash === false || !$this->db->update('magirc_admin', ['password' => $hash], ['id' => $account['id'], 'password' => $account['password']])) {
+                ($this->logger ?? \MagIRC\Logging\LoggerFactory::get())->error('MagIRC legacy password upgrade failed.');
+                return false;
+            }
+        }
+        if (!session_regenerate_id(true)) {
+            return false;
+        }
+        $_SESSION['username'] = $username;
+        $_SESSION['ipaddr'] = $_SERVER['REMOTE_ADDR'] ?? '';
+        return true;
     }
 
     /**
      * Returns session status
      * @return boolean true: valid session, false: no valid session
      */
-    function sessionStatus() {
+    public function sessionStatus() {
         if (!isset($_SESSION["username"])) {
             $_SESSION["message"] = "Access denied";
             return false;
@@ -114,9 +138,9 @@ class Admin {
      * @param string $value
      * @return boolean true: updated, false: not updated
      */
-    function saveConfig($parameter, $value) {
+    public function saveConfig($parameter, $value) {
         $this->cfg->$parameter = $value;
-        return $this->db->update('magirc_config', array('value' => $value), array('parameter' => $parameter));
+        return $this->db->update('magirc_config', ['value' => $value], ['parameter' => $parameter]);
     }
 
     /**
@@ -124,11 +148,12 @@ class Admin {
      * @param string $name Content identifier
      * @return string HTML content
      */
-    function getContent($name) {
+    public function getContent($name) {
         $ps = $this->db->prepare("SELECT text FROM magirc_content WHERE name = :name");
         $ps->bindParam(':name', $name, PDO::PARAM_STR);
         $ps->execute();
-        return $ps->fetch(PDO::FETCH_COLUMN);
+        $content = $ps->fetch(PDO::FETCH_COLUMN);
+        return $name === 'welcome' ? \MagIRC\Security\HtmlSanitizer::sanitize((string) $content) : $content;
     }
 
     /**
@@ -137,8 +162,11 @@ class Admin {
      * @param string $text HTML content
      * @return boolean true: updated, false: not updated
      */
-    function saveContent($name, $text) {
+    public function saveContent($name, $text) {
         $name = str_replace('content_', '', $name);
-        return $this->db->update('magirc_content', array('text' => $text), array('name' => $name));
+        if ($name === 'welcome') {
+            $text = \MagIRC\Security\HtmlSanitizer::sanitize($text);
+        }
+        return $this->db->update('magirc_content', ['text' => $text], ['name' => $name]);
     }
 }

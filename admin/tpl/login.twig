@@ -9,6 +9,8 @@
     <span id="message">Please insert your credentials</span><br /><br />
     <noscript>WARNING: Your web browser does not support JavaScript. However this is needed in order to use this application!</noscript>
     <form id="magirc-login" method="post" action="index.php/login">
+        <input type="hidden" name="csrf_name" value="{{ csrf.csrf_name }}" />
+        <input type="hidden" name="csrf_value" value="{{ csrf.csrf_value }}" />
         <table class="form">
             <tr>
                 <th><label for="username">Username</label></th>

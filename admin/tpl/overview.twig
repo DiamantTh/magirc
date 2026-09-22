@@ -7,6 +7,8 @@
 
     <div class="halfleft">
         <form id="logout" method="post" action="index.php/logout">
+            <input type="hidden" name="csrf_name" value="{{ csrf.csrf_name }}" />
+            <input type="hidden" name="csrf_value" value="{{ csrf.csrf_value }}" />
             <h1>Welcome, {{ username }}</h1>
             <button type="submit" name="logout">Logout</button>
         </form>
@@ -27,7 +29,7 @@
             <tr><th style="text-align:right;">IRCd</th><td style="text-align:left;">{{ cfg.ircd_type }}</td></tr>
             <tr><th style="text-align:right;">PHP</th><td style="text-align:left;">{{ version.php }}</td></tr>
             <tr><th style="text-align:right;">Slim Framework</th><td style="text-align:left;">{{ version.slim }}</td></tr>
-            <tr><th style="text-align:right;">Twig</th><td style="text-align:left;">{{ constant('Twig_Environment::VERSION') }}</td></tr>
+            <tr><th style="text-align:right;">Twig</th><td style="text-align:left;">{{ constant('Twig\\Environment::VERSION') }}</td></tr>
         </table>
         <br /><img src="img/gplv3.png" alt="GPLv3" />
     </div>

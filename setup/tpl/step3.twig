@@ -5,10 +5,11 @@
 
 <pre>Checking for MagIRC Admin users... {% if admins %}<span style="color:green;">Found</span>{% else %}<span style="color:red">Not found</span>{% endif %}</pre>
 
-{% if not admins %}
+{% if can_create %}
     {% if error %}<pre>Creating Admin user... <span style="color:red;">Failed</span></pre>{% endif %}
     <p>You must now create a MagIRC admin user</p>
     <form id="login" method="post" action="?step=3">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}" />
         <table class="form">
             <tr>
                 <th><label for="username">User</label></th>
@@ -21,8 +22,10 @@
         </table>
         <button type="submit" name="login" >Create</button>
     </form>
-{% else %}
+{% elseif admins %}
     <button class="next">Continue</button>
+{% else %}
+    <p>Could not verify the administrator table. Setup cannot safely continue.</p>
 {% endif %}
 
 {% endblock %}
