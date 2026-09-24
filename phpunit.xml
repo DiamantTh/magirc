@@ -3,6 +3,7 @@
     <testsuites>
         <testsuite name="MagIRC regression tests">
             <file>tests/ModernizationTest.php</file>
+            <file>tests/IsolatedDatabaseGuardTest.php</file>
         </testsuite>
         <testsuite name="MagIRC integration tests">
             <directory suffix="Test.php">tests/Integration</directory>

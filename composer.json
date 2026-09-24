@@ -78,12 +78,13 @@
     "scripts": {
         "test": [
             "phpunit --testsuite 'MagIRC regression tests'",
-            "sh tests/security/run.sh",
-            "sh tests/integration/run.sh"
+            "sh tests/security/run.sh"
         ],
         "test:security": "sh tests/security/run.sh",
         "test:integration": "sh tests/integration/run.sh",
         "test:installation": "sh tests/installation/run.sh",
+        "check": "sh scripts/check.sh read-only",
+        "check:isolated": "sh scripts/check.sh isolated",
         "analyse": "phpstan analyse --no-progress --debug",
         "cs": "phpcs",
         "rector:check": "rector process --dry-run --no-progress-bar --max-changes=1000"

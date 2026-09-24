@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace MagIRC\Tests\Integration;
 
+require_once __DIR__ . '/IsolatedDatabaseGuard.php';
+
 use MagIRC\Cache\StatisticsCache;
 use MagIRC\Routes\RestRoutes;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
@@ -22,6 +24,7 @@ final class DatabaseIntegrationTest extends TestCase
         if (!is_string($dsn) || $dsn === '') {
             self::markTestSkipped('MAGIRC_TEST_DSN is not configured; MySQL/MariaDB integration tests are skipped.');
         }
+        \MagIRCTests\Integration\IsolatedDatabaseGuard::assertSafe();
         try {
             return new \PDO(
                 $dsn,

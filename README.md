@@ -49,8 +49,10 @@ Security controls and remaining deployment risks are documented in [doc/security
 
 ### Development checks ###
 
-* `composer test` runs PHPUnit regression tests and the security regression scripts.
-* `composer test:integration` runs the MySQL/MariaDB Anope and Denora integration suite when `MAGIRC_TEST_DSN` is configured.
+* `composer check` is the native, GitHub-independent check: locked Composer platform requirements and audit, PHPUnit regressions, security scripts, PHPStan, PHPCS, Rector and existing frontend asset tests. Run `composer install` with development dependencies and build the locked frontend assets first. It does not touch an application database; tests may write disposable files under the local temporary directory or `tmp/`. Composer Audit requires network access.
+* `composer test` runs PHPUnit regressions and the security scripts without database fixtures.
+* `composer check:isolated` adds Anope/Denora/MagIRC database fixtures, an installation smoke test and real HTTP requests to an application copy started on `127.0.0.1`. Set `MAGIRC_TEST_ISOLATED=1` and point `MAGIRC_TEST_DSN` at a dedicated MySQL/MariaDB database named exactly `magirc_test`; the fixture tests create and drop tables there. Never point this mode at a production database. See [doc/integration-tests.md](doc/integration-tests.md).
+* `composer test:integration` runs only the destructive database fixtures and requires the same isolation marker and database name.
 * `composer test:installation` renders the setup entry point and checks the PHP 8.4 requirement guard (run after `yarn build:runtime`).
 * `composer analyse` runs PHPStan; `composer cs` checks PSR-12; `composer rector:check` checks the configured PHP 8.4 Rector set.
 * `yarn install --frozen-lockfile` reproduces the frontend dependencies from `yarn.lock`.
@@ -58,6 +60,8 @@ Security controls and remaining deployment risks are documented in [doc/security
 * `yarn build:runtime` copies the browser runtime files to `assets/vendor`; `yarn test:runtime-assets` verifies the production asset set.
 
 Database-backed Anope/Denora integration tests and their required environment variables are documented in [doc/integration-tests.md](doc/integration-tests.md).
+
+The optional GitHub workflow starts only through `workflow_dispatch` and calls `composer check:isolated` after installing and building dependencies. GitHub repository settings currently allow only local Actions, so that optional workflow cannot start its external setup Actions until the repository owner separately changes that policy. Native checks do not depend on GitHub Actions.
 
 The public and REST routes are registered in `src/MagIRC/Routes`; theme directories contain templates and presentation assets only. Existing installations using `conf/*.cfg.php` remain readable, while all new writes use validated JSON configuration files. Gettext still uses the native PO/MO directory contract (`locale/<locale>/LC_MESSAGES/messages.*`); this upstream snapshot does not contain tracked catalog files, so the English msgid is the fallback until catalogs are supplied.
    Setup is disabled after the first administrator is created. If you need to run the setup workflow again for maintenance, temporarily set the server environment variable `MAGIRC_ALLOW_SETUP=1`; this does not re-enable administrator creation.

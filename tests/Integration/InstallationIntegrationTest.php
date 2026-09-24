@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace MagIRCTests\Integration;
 
+require_once __DIR__ . '/IsolatedDatabaseGuard.php';
+
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
@@ -16,6 +18,7 @@ final class InstallationIntegrationTest extends TestCase
         if (!is_string($dsn) || $dsn === '') {
             self::markTestSkipped('MAGIRC_TEST_DSN is not configured; installation integration test is skipped.');
         }
+        IsolatedDatabaseGuard::assertSafe();
         try {
             return new \PDO(
                 $dsn,

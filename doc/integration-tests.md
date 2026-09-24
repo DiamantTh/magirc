@@ -2,23 +2,28 @@
 
 ## Lokale Ausführung
 
-Die normalen Regressionstests benötigen keine Datenbank:
+Die lesenden Prüfungen benötigen keine Datenbank und verändern keine vorhandene Installation:
 
 ```sh
-composer test
+composer check
 ```
 
-Für die MySQL-/MariaDB-Tests werden eine erreichbare Testdatenbank und diese Variablen benötigt:
+Voraussetzungen sind `composer install` mit Entwicklungsabhängigkeiten, `yarn install --frozen-lockfile` und gebaute Runtime-Assets. Der Composer-Audit benötigt Netzwerkzugang. PHPUnit und die Sicherheitsprüfungen verwenden temporäre Dateien beziehungsweise den lokalen Cache unter `tmp/`.
+
+Für die schreibenden MySQL-/MariaDB- und HTTP-Tests wird eine **eigens dafür angelegte, isolierte** Datenbank mit dem Namen `magirc_test` benötigt. Sie darf keine fremden Tabellen oder produktiven Daten enthalten:
 
 ```sh
 export MAGIRC_TEST_DSN='mysql:host=127.0.0.1;port=3306;dbname=magirc_test;charset=utf8mb4'
 export MAGIRC_TEST_DB_USER=magirc
 export MAGIRC_TEST_DB_PASSWORD=magirc
 export MAGIRC_TEST_DB_PORT=3306
-vendor/bin/phpunit --testsuite 'MagIRC integration tests'
+export MAGIRC_TEST_ISOLATED=1
+composer check:isolated
 ```
 
-Fehlt `MAGIRC_TEST_DSN`, werden die drei datenbankabhängigen Tests übersprungen. Die Tests legen ihre Tabellen selbst an und entfernen beziehungsweise überschreiben sie vor jedem separaten Testprozess. Es werden keine produktiven Datenbanken verwendet.
+`composer test:integration` führt nur die drei Datenbanktests aus. Ohne Isolationskennzeichen, ohne DSN oder mit einem anderen Datenbanknamen wird der Lauf mit Exitcode 2 verweigert. Auch ein direkter PHPUnit-Aufruf prüft diese Grenze. Die Tests legen ihre Tabellen selbst an und entfernen beziehungsweise überschreiben sie; sie dürfen ausschließlich gegen die ausdrücklich isolierte Testdatenbank laufen.
+
+`composer check:isolated` erstellt zusätzlich eine temporäre Anwendungskopie, konfiguriert darin einen Testadministrator und Anope-Fixtures und startet einen PHP-Webserver ausschließlich auf `127.0.0.1`. Geprüft werden echte HTTP-Antworten für Frontend, REST-Status/ETag/304, versteckte Channels, Admin-Login, CSRF, Sessions, Logout, Installer-Sperre und Datenbankausfall. Die Testinstanz und ihre Tabellen werden danach entfernt. Der PHP-Entwicklungsserver bildet die Apache-/Nginx-Sperren für statische Dateien nicht nach; diese müssen für eine produktive Bereitstellung mit dem tatsächlich verwendeten Webserver geprüft werden.
 
 ## Reproduzierbare Testdaten
 
@@ -32,9 +37,10 @@ Geprüft werden Verbindungsaufbau, JSON-Konfiguration und UTF-8-DSN, aktuelle/ma
 
 ## CI
 
-`.github/workflows/ci.yml` testet PHP 8.4 und 8.5 jeweils mit einem MariaDB-11.4-Service. Der Workflow installiert Composer- und Yarn-Lockfile reproduzierbar, baut den Tiptap-Bundle, führt Regressionen, Datenbankintegration, Sicherheitschecks, PHPStan, PHPCS, Rector und Composer Audit aus.
+`.github/workflows/ci.yml` ist nur manuell über `workflow_dispatch` startbar. Es installiert die Lockfile-Abhängigkeiten, baut die Assets und ruft `composer check:isolated` für PHP 8.4 und 8.5 mit einem MariaDB-11.4-Service auf. Die lokale Prüfung verwendet denselben nativen Befehl. Die bestehende GitHub-Richtlinie `allowed_actions: local_only` verhindert derzeit die optionalen externen Setup-Actions; sie wird durch diesen Auftrag nicht geändert.
 
-Auf dem Host ist PHP 8.5.10 verfügbar; ein PHP-8.4-Binary ist dort nicht
-installiert. Die Regression-, Sicherheits- und Installer-Tests wurden zusätzlich
-in einem temporären PHP-8.4.25-Container ausgeführt. Die CI-Matrix führt die
-vollständige Suite für PHP 8.4 und 8.5 aus.
+Der native Aufruf wurde lokal mit PHP 8.5.10 und MariaDB 11.4 ausgeführt.
+PHP 8.4.26 wurde in einem temporären Container gegen dieselbe isolierte
+MariaDB getestet, einschließlich HTTP, Regressionen und statischer PHP-Checks.
+MySQL 8.4 wurde zusätzlich mit den Datenbank- und HTTP-Fixtures geprüft.
+Dies sind lokale Ergebnisse; ein grüner GitHub-Actions-Lauf liegt nicht vor.
