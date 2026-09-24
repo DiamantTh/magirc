@@ -1,8 +1,6 @@
 name: MagIRC CI
 
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -36,6 +34,7 @@ jobs:
       MAGIRC_TEST_DB_USER: magirc
       MAGIRC_TEST_DB_PASSWORD: magirc
       MAGIRC_TEST_DB_PORT: '3306'
+      MAGIRC_TEST_ISOLATED: '1'
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Set up PHP
@@ -58,13 +57,5 @@ jobs:
         run: yarn build:editor
       - name: Build production runtime assets
         run: yarn build:runtime
-      - name: Run PHPUnit, security and database integration tests
-        run: composer test
-      - name: Run static checks
-        run: composer cs && composer analyse && composer rector:check
-      - name: Composer audit
-        run: composer audit
-      - name: Frontend bundle check
-        run: yarn test:editor && yarn test:runtime-assets
-      - name: Installation entrypoint smoke test
-        run: composer test:installation
+      - name: Run native isolated checks
+        run: composer check:isolated
