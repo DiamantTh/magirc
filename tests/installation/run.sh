@@ -1,15 +1,24 @@
-#!/usr/bin/env sh
+#!/bin/sh
 set -eu
 
-if [ ! -f assets/vendor/jquery/jquery.min.js ]; then
-    echo "installation smoke tests: SKIPPED (run yarn build:runtime first)"
-    exit 0
+test_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+root=$(CDPATH= cd -- "$test_dir/../.." && pwd)
+if [ ! -f "$root/assets/vendor/jquery/jquery.min.js" ] || [ ! -f "$root/vendor/autoload.php" ]; then
+    echo 'Installation smoke test requires built runtime assets and Composer dependencies.' >&2
+    exit 2
 fi
 
-output_file=$(mktemp)
-trap 'rm -f "$output_file"' EXIT
-REQUEST_METHOD=GET php setup/index.php > "$output_file"
-grep -q 'Requirements check' "$output_file"
-grep -q 'Checking PHP version' "$output_file"
-grep -q '>Supported</span>' "$output_file"
-echo "installation entrypoint smoke: OK"
+umask 077
+work=$(mktemp -d)
+trap 'rm -rf -- "$work"' EXIT HUP INT TERM
+app="$work/app"
+mkdir -p "$app/conf" "$app/tmp"
+for path in assets lib setup vendor; do
+    cp -a "$root/$path" "$app/$path"
+done
+
+REQUEST_METHOD=GET php "$app/setup/index.php" > "$work/response.html"
+grep -q 'Requirements check' "$work/response.html"
+grep -q 'Checking PHP version' "$work/response.html"
+grep -q '>Supported</span>' "$work/response.html"
+echo 'Isolated installation entrypoint smoke: OK'

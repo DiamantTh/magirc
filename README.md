@@ -53,7 +53,7 @@ Security controls and remaining deployment risks are documented in [doc/security
 * `composer test` runs PHPUnit regressions and the security scripts without database fixtures.
 * `composer check:isolated` adds Anope/Denora/MagIRC database fixtures, an installation smoke test and real HTTP requests to an application copy started on `127.0.0.1`. Set `MAGIRC_TEST_ISOLATED=1` and point `MAGIRC_TEST_DSN` at a dedicated MySQL/MariaDB database named exactly `magirc_test`; the fixture tests create and drop tables there. Never point this mode at a production database. See [doc/integration-tests.md](doc/integration-tests.md).
 * `composer test:integration` runs only the destructive database fixtures and requires the same isolation marker and database name.
-* `composer test:installation` renders the setup entry point and checks the PHP 8.4 requirement guard (run after `yarn build:runtime`).
+* `composer test:installation` renders the setup entry point from a temporary application copy and checks the PHP 8.4 requirement guard (run after `yarn build:runtime`).
 * `composer analyse` runs PHPStan; `composer cs` checks PSR-12; `composer rector:check` checks the configured PHP 8.4 Rector set.
 * `yarn install --frozen-lockfile` reproduces the frontend dependencies from `yarn.lock`.
 * `yarn build:editor` rebuilds the locally bundled Tiptap welcome editor.

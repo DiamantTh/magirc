@@ -24,7 +24,6 @@ trap cleanup EXIT HUP INT TERM
 for path in admin assets index.php js lib locale rest setup src theme vendor; do
     cp -a "$root/$path" "$app/$path"
 done
-php "$test_dir/fixture.php" setup "$app"
 
 port=$(php -r '$socket = stream_socket_server("tcp://127.0.0.1:0", $error, $message); if (!$socket) { exit(1); } echo substr(strrchr(stream_socket_get_name($socket, false), ":"), 1); fclose($socket);')
 php -S "127.0.0.1:$port" -t "$app" > "$work/server.log" 2>&1 &
@@ -44,6 +43,8 @@ if [ "$ready" -ne 1 ]; then
     exit 1
 fi
 
+php "$test_dir/assert-unconfigured.php" "http://127.0.0.1:$port"
+php "$test_dir/fixture.php" setup "$app"
 if ! php "$test_dir/assert.php" "http://127.0.0.1:$port" "$app"; then
     cat "$work/server.log" >&2
     if [ -f "$app/tmp/magirc.log" ]; then
