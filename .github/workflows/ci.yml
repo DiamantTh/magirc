@@ -3,11 +3,15 @@ name: MagIRC CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test:
     name: PHP ${{ matrix.php }} / MariaDB
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -31,20 +35,20 @@ jobs:
       MAGIRC_TEST_DSN: mysql:host=127.0.0.1;port=3306;dbname=magirc_test;charset=utf8mb4
       MAGIRC_TEST_DB_USER: magirc
       MAGIRC_TEST_DB_PASSWORD: magirc
-      MAGIRC_TEST_DB_PORT: 3306
+      MAGIRC_TEST_DB_PORT: '3306'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Set up PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@b604ade2a87db23f8871b7182e69ec5e75effb45 # v2
         with:
           php-version: ${{ matrix.php }}
           extensions: dom, gettext, mbstring, pdo_mysql
           coverage: none
           tools: composer:v2
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: 20
+          node-version: '24'
           cache: yarn
       - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
