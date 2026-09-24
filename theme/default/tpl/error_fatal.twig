@@ -8,7 +8,7 @@
     *** STOP: {{ err_msg }}
     <br /><br />
     {% if constant('DEBUG') %}
-        {% if err_extra %}Trace:<br />{{ err_extra|raw }}<br /><br />{% endif %}
+        {% if err_extra %}Trace:<br />{{ err_extra }}<br /><br />{% endif %}
         {% for key,item in server %}
             {{ key }}: {{ item }}<br />
         {% endfor %}

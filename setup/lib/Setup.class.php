@@ -10,7 +10,8 @@ class Setup {
         $loader = new \Twig\Loader\FilesystemLoader(__DIR__.'/../tpl');
         $this->tpl = new \Twig\Environment($loader, [
             'cache' => __DIR__ . '/../../tmp',
-            'debug' => false
+            'debug' => false,
+            'autoescape' => 'html',
         ]);
         $this->tpl->addGlobal('csrf_token', MagircSecurity::csrfToken());
 
@@ -156,8 +157,16 @@ class Setup {
      */
     public function generateBaseUrl() {
         $base_url = @$_SERVER['HTTPS'] ? 'https://' : 'http://';
-        $base_url .= $_SERVER['SERVER_NAME'];
-        $base_url .= $_SERVER['SERVER_PORT'] == 80 ? '' : ':'.$_SERVER['SERVER_PORT'];
+        $host = (string) ($_SERVER['SERVER_NAME'] ?? $_SERVER['HTTP_HOST'] ?? 'localhost');
+        if (!preg_match('/^(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(?::[0-9]{1,5})?$/D', $host)) {
+            $host = 'localhost';
+        }
+        $base_url .= $host;
+        $port = isset($_SERVER['SERVER_PORT']) && ctype_digit((string) $_SERVER['SERVER_PORT']) ? (int) $_SERVER['SERVER_PORT'] : 0;
+        $hostHasPort = (bool) preg_match('/(?:\]:|^[^:]+:)[0-9]{1,5}$/D', $host);
+        if (!$hostHasPort && $port > 0 && (($base_url !== 'http://' . $host || $port !== 80) && ($base_url !== 'https://' . $host || $port !== 443))) {
+            $base_url .= ':' . $port;
+        }
         $base_url .= str_replace('setup/index.php', '', $_SERVER['SCRIPT_NAME']);
         return (str_ends_with($base_url, "/")) ? substr($base_url, 0, -1) : $base_url;
     }
@@ -337,7 +346,9 @@ class Setup {
             return false;
         }
         $username = trim($username);
-        if ($username === '' || strlen($username) > 128 || $password === '' || strlen($password) > 4096 || !$this->db) {
+        if ($username === '' || strlen($username) > 16 || str_contains($username, "\0")
+            || strlen($password) < MagircSecurity::MIN_PASSWORD_LENGTH
+            || strlen($password) > MagircSecurity::MAX_PASSWORD_LENGTH || !$this->db) {
             return false;
         }
         if (is_file(MAGIRC_CONF_DIR . DIRECTORY_SEPARATOR . '.installed')) {
@@ -345,8 +356,14 @@ class Setup {
         }
 
         $lockFile = MAGIRC_CONF_DIR . DIRECTORY_SEPARATOR . '.installing';
-        $lock = @fopen($lockFile, 'x');
-        if (!$lock) {
+        if (is_link($lockFile)) {
+            return false;
+        }
+        $lock = @fopen($lockFile, 'c+');
+        if (!$lock || !@flock($lock, LOCK_EX | LOCK_NB)) {
+            if (is_resource($lock)) {
+                fclose($lock);
+            }
             return false;
         }
         @chmod($lockFile, 0600);
@@ -364,9 +381,14 @@ class Setup {
             self::markInstalled();
             return true;
         } catch (Throwable $exception) {
-            error_log('MagIRC installer failed to create an administrator: ' . $exception->getMessage());
+            if (class_exists(\MagIRC\Logging\LoggerFactory::class)) {
+                \MagIRC\Logging\LoggerFactory::get()->error('MagIRC installer failed to create an administrator.', ['exception_class' => $exception::class]);
+            } else {
+                error_log('MagIRC installer failed to create an administrator [' . $exception::class . '].');
+            }
             return false;
         } finally {
+            @flock($lock, LOCK_UN);
             fclose($lock);
             @unlink($lockFile);
         }

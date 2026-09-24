@@ -63,9 +63,13 @@ try {
     $setup = (new ReflectionClass('Setup'))->newInstanceWithoutConstructor();
     $database = new InstallerTestDatabase();
     $setup->db = $database;
+    check(!$setup->createAdmin('owner', 'short'), 'Installer accepted a password below the minimum length.');
+    check($database->inserts === 0, 'Weak password attempt modified the administrator table.');
+    file_put_contents($temp . '/.installing', "stale\n");
     check($setup->createAdmin('owner', 'A-Strong-Password'), 'First administrator could not be created.');
     check(MagircSecurity::verifyPassword('A-Strong-Password', $database->admin['password']), 'Installer did not store a password_hash hash.');
     check(is_file($temp . '/.installed'), 'Successful install did not create its disable marker.');
+    check(!is_file($temp . '/.installing'), 'Installer lock was not released after recovering a stale lock.');
     check(!$setup->createAdmin('attacker', 'Another-Password'), 'Installer allowed a second administrator.');
     check($database->inserts === 1, 'Installer performed more than one administrator insert.');
     echo "installer security regressions: OK\n";

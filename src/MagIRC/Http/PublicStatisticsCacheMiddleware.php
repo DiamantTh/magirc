@@ -13,7 +13,9 @@ final class PublicStatisticsCacheMiddleware implements MiddlewareInterface
 {
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        if (strtoupper($request->getMethod()) !== 'GET' || !$this->isPublic($request) || $request->hasHeader('Authorization') || isset($_SESSION['username'])) {
+        $sessionActive = session_status() === PHP_SESSION_ACTIVE
+            && (isset($_COOKIE[session_name()]) || isset($_SESSION['username']));
+        if (strtoupper($request->getMethod()) !== 'GET' || !$this->isPublic($request) || $request->hasHeader('Authorization') || $sessionActive || isset($_SESSION['username'])) {
             return $handler->handle($request)->withHeader('Cache-Control', 'private, no-store');
         }
         $response = $handler->handle($request);

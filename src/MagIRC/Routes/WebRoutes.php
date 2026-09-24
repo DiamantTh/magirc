@@ -16,15 +16,22 @@ final class WebRoutes
         $view = $app->getContainer()->get(Twig::class);
         $config = $magirc->cfg->config;
         $locales = $magirc->getLocalesSelect();
-        $themePath = dirname(__DIR__, 3) . '/theme/' . basename((string) $magirc->cfg->theme) . '/tpl';
+        $themeRoot = realpath(dirname(__DIR__, 3) . '/theme');
+        $themePath = $themeRoot === false ? false : realpath($themeRoot . DIRECTORY_SEPARATOR . basename((string) $magirc->cfg->theme) . DIRECTORY_SEPARATOR . 'tpl');
+        if ($themeRoot === false || $themePath === false || !str_starts_with($themePath, $themeRoot . DIRECTORY_SEPARATOR)) {
+            $themePath = $themeRoot === false ? false : realpath($themeRoot . '/default/tpl');
+        }
+        if ($themePath === false) {
+            throw new \RuntimeException('No valid theme template directory is available.');
+        }
 
-        $renderError = (static fn($response, int $code) => $view->render($response, 'error.twig', [
+        $renderError = (fn($response, int $code) => $view->render($response, 'error.twig', [
             'cfg' => $config,
             'locales' => $locales,
             'err_code' => $code,
         ])->withStatus($code));
 
-        $renderSection = static function ($request, $response, array $args) use ($view, $config, $locales, $themePath, $renderError) {
+        $renderSection = function ($request, $response, array $args) use ($view, $config, $locales, $themePath, $renderError) {
             $section = basename((string) ($args['section'] ?? 'network'));
             $action = basename((string) ($args['action'] ?? 'main'));
             $template = $section . '_' . $action . '.twig';
@@ -41,23 +48,26 @@ final class WebRoutes
             ]);
         };
 
-        $app->get('/', static fn($request, $response) => $view->render($response, 'network_main.twig', [
+        $app->get('/', fn($request, $response) => $view->render($response, 'network_main.twig', [
             'cfg' => $config,
             'locales' => $locales,
             'section' => 'network',
         ]))->setName('network');
-        $app->get('/network', static fn($request, $response) => $view->render($response, 'network_main.twig', [
+        $app->get('/network', fn($request, $response) => $view->render($response, 'network_main.twig', [
             'cfg' => $config,
             'locales' => $locales,
             'section' => 'network',
         ]));
 
-        $app->get('/content/{name}', static function ($request, $response, $args) use ($magirc) {
-            $response->getBody()->write((string) $magirc->getContent((string) $args['name']));
+        $app->get('/content/{name}', function ($request, $response, $args) use ($magirc) {
+            if (($args['name'] ?? '') !== 'welcome') {
+                return $response->withStatus(404);
+            }
+            $response->getBody()->write((string) $magirc->getContent('welcome'));
             return $response->withHeader('Content-Type', 'text/html; charset=utf-8');
         });
 
-        $app->get('/channel/{target}/{action}', static function ($request, $response, $args) use ($magirc, $view, $config, $locales, $themePath, $renderError) {
+        $app->get('/channel/{target}/{action}', function ($request, $response, $args) use ($magirc, $view, $config, $locales, $themePath, $renderError) {
             $template = 'channel_' . basename((string) $args['action']) . '.twig';
             if (!is_file($themePath . DIRECTORY_SEPARATOR . $template)) {
                 return $renderError($response, 404);
@@ -67,7 +77,7 @@ final class WebRoutes
                 return $renderError($response, 404);
             }
             if ($status === 403) {
-                return $renderError($response, 405);
+                return $renderError($response, 403);
             }
 
             return $view->render($response, $template, [
@@ -79,10 +89,10 @@ final class WebRoutes
             ]);
         })->setName('channel');
 
-        $app->get('/user/{target}/{action}', static function ($request, $response, $args) use ($magirc, $view, $config, $locales, $themePath, $renderError) {
+        $app->get('/user/{target}/{action}', function ($request, $response, $args) use ($magirc, $view, $config, $locales, $themePath, $renderError) {
             $template = 'user_' . basename((string) $args['action']) . '.twig';
             $parts = explode(':', (string) $args['target'], 2);
-            if (!is_file($themePath . DIRECTORY_SEPARATOR . $template) || count($parts) !== 2 || !$magirc->service->checkUser($parts[1], $parts[0])) {
+            if (!is_file($themePath . DIRECTORY_SEPARATOR . $template) || count($parts) !== 2 || !in_array($parts[0], ['nick', 'stats'], true) || !$magirc->service->checkUser($parts[1], $parts[0])) {
                 return $renderError($response, 404);
             }
 
@@ -96,6 +106,6 @@ final class WebRoutes
         })->setName('user');
 
         $app->get('/{section}/{target}/{action}', $renderSection)->setName('genericFull');
-        $app->get('/{section}[/{action}]', static fn($request, $response, $args) => $renderSection($request, $response, $args + ['action' => 'main']))->setName('generic');
+        $app->get('/{section}[/{action}]', fn($request, $response, $args) => $renderSection($request, $response, $args + ['action' => 'main']))->setName('generic');
     }
 }

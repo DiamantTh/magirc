@@ -147,7 +147,7 @@ $(document).ready(function() {
 					color: '#000000',
 					connectorColor: '#000000',
 					formatter: function() {
-						return '<b>'+ this.point.name +'<\/b>: '+ Math.round(this.percentage * 100) / 100 +' %';
+						return '<b>'+ escapeTags(this.point.name) +'<\/b>: '+ Math.round(this.percentage * 100) / 100 +' %';
 					}
 				}
 			},
@@ -172,15 +172,21 @@ function getTimeElapsed(seconds) {
 }
 
 function escapeTags(str) {
-	return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	return String(str == null ? '' : str)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
 }
 
 function getCountryFlag(user) {
-    if (user['country_code'] != null && user['country_code'] != '' && user['country_code'] != '??' && user['country_code'] != 'local') {
-        var country = user.country ? user.country : user.country_code;
-        var title = (user.city) ? (user.city + ', ' + user.region + ', ' + country) : country;
-        return '<span class="flag-icon flag-icon-'+user['country_code'].toLowerCase()+'" alt="'+user['country_code']+'" title="'+title+'"></span>';
+    var code = String(user['country_code'] == null ? '' : user['country_code']).toLowerCase();
+    if (/^[a-z]{2}$/.test(code) && code !== 'local') {
+        var country = user.country ? String(user.country) : code;
+        var title = (user.city) ? (String(user.city) + ', ' + String(user.region || '') + ', ' + country) : country;
+        return '<span class="flag-icon flag-icon-'+escapeTags(code)+'" aria-label="'+escapeTags(code)+'" title="'+escapeTags(title)+'"></span>';
     } else {
-        return '<span class="flag-icon" alt="Unknown" title="'+mLang.Unknown+'"></span>';
+        return '<span class="flag-icon" aria-label="Unknown" title="'+escapeTags(mLang.Unknown)+'"></span>';
     }
 }

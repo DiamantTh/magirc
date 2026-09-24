@@ -40,7 +40,7 @@
 <script type="text/javascript" src="../assets/vendor/datatables/jquery.dataTables.min.js"></script>
 <script type="text/javascript" src="../assets/vendor/jquery-form/jquery.form.js"></script>
 <script type="text/javascript">
-var url_base = '{{ constant('BASE_URL') }}';
+var url_base = '{{ constant('BASE_URL')|e('js') }}';
 $(document).ready(function() {
     $.ajaxSetup({ beforeSend: function(xhr) {
         xhr.setRequestHeader('csrf_name', $('meta[name="csrf-name"]').attr('content'));

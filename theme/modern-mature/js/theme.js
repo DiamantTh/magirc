@@ -494,15 +494,16 @@ function openChanMenu(element) {
 }
 
 function getUserStatus(user) {
-    if (user['away']) return '<img src="theme/'+theme+'/img/status/user-away.png" alt="away" title="'+mLang.AwayAs+' '+user['nickname']+'" \/>';
-    else if (user['online']) return '<img src="theme/'+theme+'/img/status/user-online.png" alt="online" title="'+mLang.OnlineAs+' '+user['nickname']+'" \/>';
+    var nickname = escapeTags(user['nickname']);
+    if (user['away']) return '<img src="theme/'+theme+'/img/status/user-away.png" alt="away" title="'+mLang.AwayAs+' '+nickname+'" \/>';
+    else if (user['online']) return '<img src="theme/'+theme+'/img/status/user-online.png" alt="online" title="'+mLang.OnlineAs+' '+nickname+'" \/>';
     else return '<img src="theme/'+theme+'/img/status/user-offline.png" alt="offline" title="'+mLang.Offline+'" \/>';
 }
 function getUserExtra(user) {
     var out = '';
     if (user['bot']) out += ' <img src="theme/'+theme+'/img/status/bot.png" alt="bot" title="'+mLang.Bot+'" \/>';
     if (user['service']) out += ' <img src="theme/'+theme+'/img/status/service.png" alt="service" title="'+mLang.Service+'" \/>';
-    if (user['operator']) out += ' <img src="theme/'+theme+'/img/status/operator.png" alt="oper" title="'+user['operator_level']+'" \/>';
+    if (user['operator']) out += ' <img src="theme/'+theme+'/img/status/operator.png" alt="oper" title="'+escapeTags(user['operator_level'])+'" \/>';
     if (user['helper']) out += ' <img src="theme/'+theme+'/img/status/help.png" alt="help" title="'+mLang.Helper+'" \/>';
     return out;
 }

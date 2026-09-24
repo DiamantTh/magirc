@@ -81,7 +81,7 @@ $(document).ready(function() {
                 return getUserStatus(row) + ' ' + getCountryFlag(row) + ' ' + escapeTags(data) + getUserExtra(row);
             } },
             { "data": "cmodes", "render": function(data) {
-                return data ? '+' + data : null;
+                return data ? '+' + escapeTags(data) : null;
             } }
         ]
     });

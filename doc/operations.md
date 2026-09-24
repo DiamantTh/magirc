@@ -77,7 +77,9 @@ nicht dauerhaft lahm.
 Warnungen und Fehler werden nach `tmp/magirc.log` geschrieben. Der
 Secret-Redaction-Prozessor entfernt Passwörter, Tokens, Session-IDs und
 Datenbankkennzeichen aus Logcontext und Nachrichten. Ist `tmp/` nicht
-beschreibbar, verwendet Monolog den PHP-Error-Log.
+beschreibbar, verwendet Monolog den PHP-Error-Log. Mit `MAGIRC_RUNTIME_DIR`
+kann ein Verzeichnis außerhalb des Document-Roots für Log und Cache vorgegeben
+werden; das Log wird mit Modus `0600` angelegt.
 
 ## Fehlerbehebung
 

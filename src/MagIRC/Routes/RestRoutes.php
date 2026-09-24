@@ -18,6 +18,11 @@ final class RestRoutes
 {
     public static function register(App $app, Magirc $magirc): void
     {
+        $validUserMode = static fn (string $mode): bool => in_array($mode, ['nick', 'stats'], true);
+        $safeLimit = static function (mixed $value): int {
+            $limit = is_scalar($value) ? filter_var((string) $value, FILTER_VALIDATE_INT) : false;
+            return $limit === false ? 10 : max(1, min(100, (int) $limit));
+        };
 // Route Middleware
 
         $checkPermission = function (\Psr\Http\Message\ServerRequestInterface $request, \Psr\Http\Server\RequestHandlerInterface $handler) use ($magirc, $app) {
@@ -67,14 +72,14 @@ final class RestRoutes
 
         $app->get('/channels/history', fn($req, $res) => jsonResponse($res, $magirc->service->getChannelHistory()));
 
-        $app->get('/channels/biggest[/{limit}]', function ($req, $res, $args) use ($magirc) {
-            $limit = $args['limit'] ?? 10;
-            return jsonResponse($res, $magirc->arrayForDataTables($magirc->service->getChannelBiggest((int) $limit), 'channel'));
+        $app->get('/channels/biggest[/{limit}]', function ($req, $res, $args) use ($magirc, $safeLimit) {
+            $limit = $safeLimit($args['limit'] ?? 10);
+            return jsonResponse($res, $magirc->arrayForDataTables($magirc->service->getChannelBiggest($limit), 'channel'));
         });
 
-        $app->get('/channels/top[/{limit}]', function ($req, $res, $args) use ($magirc) {
-            $limit = $args['limit'] ?? 10;
-            return jsonResponse($res, $magirc->arrayForDataTables($magirc->service->getChannelTop((int) $limit), 'channel'));
+        $app->get('/channels/top[/{limit}]', function ($req, $res, $args) use ($magirc, $safeLimit) {
+            $limit = $safeLimit($args['limit'] ?? 10);
+            return jsonResponse($res, $magirc->arrayForDataTables($magirc->service->getChannelTop($limit), 'channel'));
         });
 
         $app->get('/channels/activity/{type}', fn($req, $res, $args) => jsonResponse($res, $magirc->service->getChannelGlobalActivity($args['type'], (($req->getQueryParams()['format'] ?? '') === 'datatables'))));
@@ -101,24 +106,54 @@ final class RestRoutes
 
         $app->get('/users/history', fn($req, $res) => jsonResponse($res, $magirc->service->getUserHistory()));
 
-        $app->get('/users/top[/{limit}]', function ($req, $res, $args) use ($magirc) {
-            $limit = $args['limit'] ?? 10;
-            return jsonResponse($res, $magirc->arrayForDataTables($magirc->service->getUsersTop((int) $limit), 'uname'));
+        $app->get('/users/top[/{limit}]', function ($req, $res, $args) use ($magirc, $safeLimit) {
+            $limit = $safeLimit($args['limit'] ?? 10);
+            return jsonResponse($res, $magirc->arrayForDataTables($magirc->service->getUsersTop($limit), 'uname'));
         });
 
         $app->get('/users/activity/{type}', fn($req, $res, $args) => jsonResponse($res, $magirc->service->getUserGlobalActivity($args['type'], (($req->getQueryParams()['format'] ?? '') === 'datatables'))));
 
-        $app->get('/users/{mode}/{user}', fn($req, $res, $args) => jsonResponse($res, $magirc->service->getUser($args['mode'], $args['user'])));
+        $app->get('/users/{mode}/{user}', function ($req, $res, $args) use ($magirc, $validUserMode) {
+            if (!$validUserMode((string) $args['mode'])) {
+                return jsonResponse($res->withStatus(404), ['error' => 'HTTP 404 Not Found']);
+            }
+            return jsonResponse($res, $magirc->service->getUser($args['mode'], $args['user']));
+        });
 
-        $app->get('/users/{mode}/{user}/channels', fn($req, $res, $args) => jsonResponse($res, $magirc->service->getUserChannels($args['mode'], $args['user'])));
+        $app->get('/users/{mode}/{user}/channels', function ($req, $res, $args) use ($magirc, $validUserMode) {
+            if (!$validUserMode((string) $args['mode'])) {
+                return jsonResponse($res->withStatus(404), ['error' => 'HTTP 404 Not Found']);
+            }
+            return jsonResponse($res, $magirc->service->getUserChannels($args['mode'], $args['user']));
+        });
 
-        $app->get('/users/{mode}/{user}/activity[/{chan}]', fn($req, $res, $args) => jsonResponse($res, $magirc->arrayForDataTables($magirc->service->getUserActivity($args['mode'], $args['user'], $args['chan']))));
+        $app->get('/users/{mode}/{user}/activity[/{chan}]', function ($req, $res, $args) use ($magirc, $validUserMode) {
+            if (!$validUserMode((string) $args['mode'])) {
+                return jsonResponse($res->withStatus(404), ['error' => 'HTTP 404 Not Found']);
+            }
+            return jsonResponse($res, $magirc->arrayForDataTables($magirc->service->getUserActivity($args['mode'], $args['user'], $args['chan'] ?? null)));
+        });
 
-        $app->get('/users/{mode}/{user}/hourly/{type}', fn($req, $res, $args) => jsonResponse($res, $magirc->service->getUserHourlyActivity($args['mode'], $args['user'], null, $args['type'])));
+        $app->get('/users/{mode}/{user}/hourly/{type}', function ($req, $res, $args) use ($magirc, $validUserMode) {
+            if (!$validUserMode((string) $args['mode'])) {
+                return jsonResponse($res->withStatus(404), ['error' => 'HTTP 404 Not Found']);
+            }
+            return jsonResponse($res, $magirc->service->getUserHourlyActivity($args['mode'], $args['user'], null, $args['type']));
+        });
 
-        $app->get('/users/{mode}/{user}/hourly/{chan}/{type}', fn($req, $res, $args) => jsonResponse($res, $magirc->service->getUserHourlyActivity($args['mode'], $args['user'], $args['chan'], $args['type'])));
+        $app->get('/users/{mode}/{user}/hourly/{chan}/{type}', function ($req, $res, $args) use ($magirc, $validUserMode) {
+            if (!$validUserMode((string) $args['mode'])) {
+                return jsonResponse($res->withStatus(404), ['error' => 'HTTP 404 Not Found']);
+            }
+            return jsonResponse($res, $magirc->service->getUserHourlyActivity($args['mode'], $args['user'], $args['chan'], $args['type']));
+        });
 
-        $app->get('/users/{mode}/{user}/checkstats', fn($req, $res, $args) => jsonResponse($res, $magirc->service->checkUserStats($args['user'], $args['mode'])));
+        $app->get('/users/{mode}/{user}/checkstats', function ($req, $res, $args) use ($magirc, $validUserMode) {
+            if (!$validUserMode((string) $args['mode'])) {
+                return jsonResponse($res->withStatus(404), ['error' => 'HTTP 404 Not Found']);
+            }
+            return jsonResponse($res, $magirc->service->checkUserStats($args['user'], $args['mode']));
+        });
 
         $app->get('/operators', fn($req, $res) => jsonResponse($res, $magirc->arrayForDataTables($magirc->service->getOperatorList(), 'nickname')));
     }

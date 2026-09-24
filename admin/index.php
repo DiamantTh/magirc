@@ -25,6 +25,7 @@ if (version_compare(PHP_VERSION, '8.4.0', '<')
     die('ERROR: System requirements not met. Please run Setup.');
 require_once(__DIR__.'/../lib/magirc/ConfigStore.class.php');
 require_once(__DIR__.'/../lib/magirc/Security.class.php');
+MagircSecurity::sendSecurityHeaders();
 $magircConfigPresent = is_file(MagircConfigStore::path('magirc', __DIR__.'/../conf')) || is_file(__DIR__.'/../conf/magirc.cfg.php');
 if (!$magircConfigPresent) {
     http_response_code(503);
@@ -72,9 +73,9 @@ if ($admin->cfg->debug_mode < 1) {
 $admin->slim->post('/login', function($req, $res, $args) use ($admin) {
     $post = (array) $req->getParsedBody();
     if ($admin->login($post['username'] ?? null, $post['password'] ?? null)) {
-        return $res->withStatus(301)->withHeader('Location', BASE_URL.'index.php/overview');
+        return $res->withStatus(303)->withHeader('Location', BASE_URL.'index.php/overview');
     }
-    return $res->withStatus(301)->withHeader('Location', BASE_URL);
+    return $res->withStatus(303)->withHeader('Location', BASE_URL);
 });
 $admin->slim->post('/ajaxlogin', function($req, $res, $args) use ($admin) {
     $post = (array) $req->getParsedBody();
@@ -83,16 +84,9 @@ $admin->slim->post('/ajaxlogin', function($req, $res, $args) use ($admin) {
     return $res->withHeader('Content-Type', 'application/json; charset=utf-8');
 });
 $admin->slim->post('/logout', function ($req, $res, $args) {
-    $post = (array) $req->getParsedBody();
-    // Unset session variables
-    if (isset($_SESSION["username"]))
-        unset($_SESSION["username"]);
-    // Delete the session cookie
-    MagircSecurity::expireSessionCookie();
-    // Destroy the session
-    session_destroy();
+    MagircSecurity::destroySession();
     // Redirect to login screen
-    return $res->withStatus(301)->withHeader('Location', BASE_URL);
+    return $res->withStatus(303)->withHeader('Location', BASE_URL);
 });
 
 $overviewRoute = function($req, $res, $args = []) use ($admin) {
@@ -196,16 +190,20 @@ $admin->slim->post('/configuration', function($req, $res, $args) use ($admin) {
     if (!$admin->sessionStatus()) {
         return magircAdminTextResponse($res, 403, 'HTTP 403 Access Denied');
     }
+    $success = true;
     foreach ($post as $key => $val) {
         if (in_array($key, ['csrf_name', 'csrf_value'], true) || !is_string($key) || !is_scalar($val)) {
             continue;
         }
         if ($key === 'base_url') {
+            $val = (string) $val;
             $val = (str_ends_with($val, "/")) ? substr($val, 0, -1) : $val;
         }
-        $admin->saveConfig($key, $val);
+        if (!$admin->saveConfig($key, $val)) {
+            $success = false;
+        }
     }
-    $res->getBody()->write(json_encode(true, JSON_THROW_ON_ERROR));
+    $res->getBody()->write(json_encode($success, JSON_THROW_ON_ERROR));
     return $res->withHeader('Content-Type', 'application/json; charset=utf-8');
 });
 $admin->slim->post('/configuration/{service}/database', function($req, $res, $args) use ($admin) {

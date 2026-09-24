@@ -19,7 +19,7 @@
 {% block js %}
 {{ parent() }}
 <script type="text/javascript">
-var mibbitid = '{{ cfg.service_mibbitid }}';
+var mibbitid = '{{ cfg.service_mibbitid|e('js') }}';
 $(document).ready(function() {
     mmInitTabs("#tabs");
 });

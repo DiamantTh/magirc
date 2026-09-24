@@ -41,11 +41,12 @@ $(document).ready(function() {
             } else {
                 $("#user_hostname").text(result.hostname);
             }
-            $("#user_server").html('<a href="'+url_base+'server/'+result.server+'/profile">'+result.server+'<\/a>');
+            var server = String(result.server || '');
+            $("#user_server").html('<a href="'+url_base+'server/'+encodeURIComponent(server)+'/profile">'+escapeTags(server)+'<\/a>');
             if (result.city){
                 $("#user_cityregion").text(result.city + ', ' + result.region + ' ');
             }
-            $("#user_country").html(getCountryFlag(result)+' '+result.country);
+            $("#user_country").html(getCountryFlag(result)+' '+escapeTags(result.country));
             $("#user_client").text(result.client);
         } else {
             $("#tbl_details").hide();

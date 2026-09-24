@@ -54,10 +54,10 @@ RewriteEngine On
 
 # Configuration, source code, templates, dependencies and temporary data are
 # never web resources. Keep this rule before the front-controller rewrite.
-RewriteRule ^(conf|lib|doc|locale|tmp|vendor|node_modules|\.git|setup/(inc|lib|sql|tools|tpl)|admin/(lib|tpl))(/|$) - [F,L,NC]
-RewriteRule ^(tests|theme/[^/]+/tpl)(/|$) - [F,L,NC]
+RewriteRule ^(conf|lib|src|doc|locale|tmp|vendor|node_modules|\.git|setup/(inc|lib|sql|tools|tpl)|admin/(lib|tpl))(/|$) - [F,L,NC]
+RewriteRule ^(tests|theme/[^/]+/(tpl|slim))(/|$) - [F,L,NC]
 RewriteRule (^|/)\.(?!well-known/) - [F,L,NC]
-RewriteRule ^(composer\.(json|lock)|package\.json|yarn\.lock|README\.md|LICENSE|phpunit\.xml)(/|$) - [F,L,NC]
+RewriteRule ^(composer\.(json|lock)|package\.json|yarn\.lock|README\.md|SECURITY\.md|LICENSE|phpunit\.xml|phpcs\.xml|_config\.yml)(/|$) - [F,L,NC]
 
 # Some hosts may require you to use the `RewriteBase` directive.
 # If you need to use the `RewriteBase` directive, it should be the

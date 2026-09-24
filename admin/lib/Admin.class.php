@@ -58,6 +58,7 @@ class Admin {
         $this->slim->add($guard);
         $this->slim->add(new \MagIRC\Http\CsrfTokenMiddleware($guard, $this->tpl->getEnvironment()));
         $this->slim->add(new \MagIRC\Http\NoStoreMiddleware());
+        $this->slim->add(new \MagIRC\Http\SecurityHeadersMiddleware());
         $this->slim->addBodyParsingMiddleware();
         $this->slim->addRoutingMiddleware();
 
@@ -94,25 +95,43 @@ class Admin {
             return false;
         }
         $username = trim($username);
-        if ($username === '') {
+        if ($username === '' || strlen($username) > 128 || strlen($password) > MagircSecurity::MAX_PASSWORD_LENGTH) {
+            return false;
+        }
+        if (!MagircSecurity::loginAttemptAllowed($username)) {
             return false;
         }
         $account = $this->db->selectOne('magirc_admin', ['username' => $username]);
-        if (!$account || empty($account['password']) || !MagircSecurity::verifyPassword($password, $account['password'])) {
+        $storedHash = is_array($account) && is_string($account['password'] ?? null)
+            ? $account['password']
+            : MagircSecurity::dummyPasswordHash();
+        if (!MagircSecurity::verifyPassword($password, $storedHash) || !is_array($account) || empty($account['password'])) {
+            MagircSecurity::recordLoginFailure($username);
             return false;
         }
-        if (preg_match('/^[a-f0-9]{32}$/iD', $account['password'])) {
-            $hash = MagircSecurity::hashPassword(trim($password));
-            if ($hash === false || !$this->db->update('magirc_admin', ['password' => $hash], ['id' => $account['id'], 'password' => $account['password']])) {
-                ($this->logger ?? \MagIRC\Logging\LoggerFactory::get())->error('MagIRC legacy password upgrade failed.');
+        $isLegacy = (bool) preg_match('/^[a-f0-9]{32}$/iD', $account['password']);
+        $needsUpgrade = $isLegacy || MagircSecurity::passwordNeedsRehash($account['password']);
+        if ($needsUpgrade) {
+            $hash = MagircSecurity::hashPassword($isLegacy ? trim($password) : $password);
+            $updated = $this->db->update('magirc_admin', ['password' => $hash], ['id' => $account['id'], 'password' => $account['password']]);
+            if (!$updated && $isLegacy) {
+                ($this->logger ?? (class_exists(\MagIRC\Logging\LoggerFactory::class) ? \MagIRC\Logging\LoggerFactory::get() : null))?->error('MagIRC legacy password upgrade failed.');
                 return false;
             }
+            if (!$updated && !$isLegacy) {
+                ($this->logger ?? (class_exists(\MagIRC\Logging\LoggerFactory::class) ? \MagIRC\Logging\LoggerFactory::get() : null))?->warning('MagIRC password hash upgrade failed.');
+            }
         }
+        MagircSecurity::startSession();
         if (!session_regenerate_id(true)) {
             return false;
         }
+        MagircSecurity::clearLoginFailures($username);
+        $now = time();
         $_SESSION['username'] = $username;
-        $_SESSION['ipaddr'] = $_SERVER['REMOTE_ADDR'] ?? '';
+        $_SESSION['ipaddr'] = is_scalar($_SERVER['REMOTE_ADDR'] ?? null) ? (string) $_SERVER['REMOTE_ADDR'] : '';
+        $_SESSION['_magirc_created_at'] = $now;
+        $_SESSION['_magirc_last_activity'] = $now;
         return true;
     }
 
@@ -121,12 +140,14 @@ class Admin {
      * @return boolean true: valid session, false: no valid session
      */
     public function sessionStatus() {
-        if (!isset($_SESSION["username"])) {
-            $_SESSION["message"] = "Access denied";
+        MagircSecurity::startSession();
+        if (!isset($_SESSION["username"]) || !is_string($_SESSION['username'])) {
             return false;
         }
-        if (!isset($_SESSION["ipaddr"]) || ($_SESSION["ipaddr"] != $_SERVER["REMOTE_ADDR"])) {
-            $_SESSION["message"] = "Access denied";
+        $remoteValue = $_SERVER['REMOTE_ADDR'] ?? '';
+        $remoteAddress = is_scalar($remoteValue) ? (string) $remoteValue : '';
+        if (!isset($_SESSION["ipaddr"]) || !is_string($_SESSION['ipaddr']) || $_SESSION["ipaddr"] !== $remoteAddress || !MagircSecurity::sessionIsFresh()) {
+            MagircSecurity::destroySession();
             return false;
         }
         return true;
@@ -139,8 +160,18 @@ class Admin {
      * @return boolean true: updated, false: not updated
      */
     public function saveConfig($parameter, $value) {
-        $this->cfg->$parameter = $value;
-        return $this->db->update('magirc_config', ['value' => $value], ['parameter' => $parameter]);
+        if (!is_string($parameter) || !array_key_exists($parameter, $this->cfg->config)) {
+            return false;
+        }
+        if (!is_scalar($value)) {
+            return false;
+        }
+        $normalized = Config::normalizeValue($parameter, $value);
+        if (in_array($parameter, ['base_url', 'service_webchat'], true) && $value !== '' && $normalized === '') {
+            return false;
+        }
+        $this->cfg->$parameter = $normalized;
+        return $this->db->update('magirc_config', ['value' => $normalized], ['parameter' => $parameter]);
     }
 
     /**

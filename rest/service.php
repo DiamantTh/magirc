@@ -16,6 +16,15 @@ if (!is_file($root . '/vendor/autoload.php')) {
 }
 require $root . '/vendor/autoload.php';
 require_once $root . '/lib/magirc/version.inc.php';
+MagircSecurity::sendSecurityHeaders();
+
+// Public statistics may be cached, but an existing authenticated browser
+// session must be recognized before the cache middleware makes that decision.
+// Do not create sessions for anonymous requests, so public responses remain
+// cacheable without a Set-Cookie side effect.
+if (isset($_COOKIE[session_name()]) && is_string($_COOKIE[session_name()])) {
+    MagircSecurity::startSession();
+}
 
 try {
     $magirc = new Magirc(false);

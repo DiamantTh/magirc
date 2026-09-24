@@ -34,4 +34,7 @@ Geprüft werden Verbindungsaufbau, JSON-Konfiguration und UTF-8-DSN, aktuelle/ma
 
 `.github/workflows/ci.yml` testet PHP 8.4 und 8.5 jeweils mit einem MariaDB-11.4-Service. Der Workflow installiert Composer- und Yarn-Lockfile reproduzierbar, baut den Tiptap-Bundle, führt Regressionen, Datenbankintegration, Sicherheitschecks, PHPStan, PHPCS, Rector und Composer Audit aus.
 
-In der aktuellen lokalen Umgebung ist PHP 8.5.10 verfügbar. Ein PHP-8.4-Binary ist nicht installiert; die PHP-8.4-Ausführung bleibt daher dem CI-Matrixlauf vorbehalten.
+Auf dem Host ist PHP 8.5.10 verfügbar; ein PHP-8.4-Binary ist dort nicht
+installiert. Die Regression-, Sicherheits- und Installer-Tests wurden zusätzlich
+in einem temporären PHP-8.4.25-Container ausgeführt. Die CI-Matrix führt die
+vollständige Suite für PHP 8.4 und 8.5 aus.

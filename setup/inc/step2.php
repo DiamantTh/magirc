@@ -11,9 +11,15 @@ if ($status['error']) {
         $status['error'] = 'Database state could not be verified. Check the configuration locally before continuing.';
     } elseif ($savedb) {
         try {
-            $setup->saveConfig();
+            if (!$setup->saveConfig()) {
+                $status['error'] = 'Configuration is invalid or could not be saved.';
+            }
         } catch (Throwable) {
-            error_log('MagIRC database configuration was rejected.');
+            if (class_exists(\MagIRC\Logging\LoggerFactory::class)) {
+                \MagIRC\Logging\LoggerFactory::get()->warning('MagIRC database configuration was rejected.');
+            } else {
+                error_log('MagIRC database configuration was rejected.');
+            }
             $status['error'] = 'Configuration is invalid or could not be saved.';
         }
     }
@@ -21,9 +27,13 @@ if ($status['error']) {
     if (empty($status['error']) && (is_file(MAGIRC_CFG_FILE) || is_file(__DIR__ . '/../../conf/magirc.cfg.php'))) {
         try {
             $db = MagircConfigStore::load('magirc', MAGIRC_CONF_DIR);
-            $setup->db = Magirc_DB::getInstance();
+            $setup->db = MagircDB::getInstance();
         } catch (Throwable $exception) {
-            error_log('MagIRC setup database check failed: ' . $exception->getMessage());
+            if (class_exists(\MagIRC\Logging\LoggerFactory::class)) {
+                \MagIRC\Logging\LoggerFactory::get()->error('MagIRC setup database check failed.', ['exception_class' => $exception::class]);
+            } else {
+                error_log('MagIRC setup database check failed [' . $exception::class . '].');
+            }
             $status['error'] = 'Database connection failed.';
         }
     } elseif (empty($status['error'])) {
@@ -43,7 +53,11 @@ if ($status['error']) {
                 $updated = $setup->configUpgrade();
             }
         } catch (Throwable $exception) {
-            error_log('MagIRC setup schema check failed: ' . $exception->getMessage());
+            if (class_exists(\MagIRC\Logging\LoggerFactory::class)) {
+                \MagIRC\Logging\LoggerFactory::get()->error('MagIRC setup schema check failed.', ['exception_class' => $exception::class]);
+            } else {
+                error_log('MagIRC setup schema check failed [' . $exception::class . '].');
+            }
             $status['error'] = 'Database schema check failed.';
         }
     }

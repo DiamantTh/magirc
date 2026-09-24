@@ -13,7 +13,11 @@ final class StatisticsCacheFactory
 {
     public static function create(array $config, string $source, LoggerInterface $logger): StatisticsCache
     {
-        $path = (string) ($config['cache_path'] ?? getenv('MAGIRC_CACHE_PATH') ?: dirname(__DIR__, 3) . '/tmp/cache');
+        $runtimeDirectory = getenv('MAGIRC_RUNTIME_DIR');
+        $runtimeDirectory = is_string($runtimeDirectory) && $runtimeDirectory !== ''
+            ? rtrim($runtimeDirectory, DIRECTORY_SEPARATOR)
+            : dirname(__DIR__, 3) . '/tmp';
+        $path = (string) ($config['cache_path'] ?? getenv('MAGIRC_CACHE_PATH') ?: $runtimeDirectory . '/cache');
         $currentTtl = max(1, (int) ($config['cache_current_ttl'] ?? getenv('MAGIRC_CACHE_CURRENT_TTL') ?: 30));
         $historyTtl = max(1, (int) ($config['cache_history_ttl'] ?? getenv('MAGIRC_CACHE_HISTORY_TTL') ?: 300));
         try {

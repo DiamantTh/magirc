@@ -21,9 +21,17 @@ final class LoggerFactory
 
         $logger = new Logger('magirc');
         $logger->pushProcessor(new SecretRedactionProcessor());
-        $logFile = dirname(__DIR__, 3) . '/tmp/magirc.log';
+        $runtimeDirectory = getenv('MAGIRC_RUNTIME_DIR');
+        $runtimeDirectory = is_string($runtimeDirectory) && $runtimeDirectory !== ''
+            ? rtrim($runtimeDirectory, DIRECTORY_SEPARATOR)
+            : dirname(__DIR__, 3) . '/tmp';
+        if (!is_dir($runtimeDirectory)) {
+            @mkdir($runtimeDirectory, 0700, true);
+        }
+        @chmod($runtimeDirectory, 0700);
+        $logFile = $runtimeDirectory . '/magirc.log';
         try {
-            $logger->pushHandler(new StreamHandler($logFile, Logger::WARNING));
+            $logger->pushHandler(new StreamHandler($logFile, Logger::WARNING, true, 0600));
         } catch (\Throwable) {
             $logger->pushHandler(new ErrorLogHandler(ErrorLogHandler::OPERATING_SYSTEM, Logger::WARNING));
         }

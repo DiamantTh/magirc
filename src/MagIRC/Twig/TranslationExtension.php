@@ -10,6 +10,11 @@ use Twig\TwigFunction;
 
 final class TranslationExtension extends AbstractExtension
 {
+    public function getTokenParsers(): array
+    {
+        return [new TranslationTokenParser(new TwigFilter('trans', $this->translate(...)))];
+    }
+
     public function getFilters(): array
     {
         return [new TwigFilter('trans', $this->translate(...))];

@@ -14,7 +14,7 @@
     <img id="mibbit_relation" src="" alt="" />
 </div>
 
-<br />{{ 'More on'|trans }} <a href="https://search.mibbit.com/networks/{$cfg->net_name}" rel="external" target="_blank">Mibbit</a>
+<br />{{ 'More on'|trans }} <a href="https://search.mibbit.com/networks/{{ cfg.net_name|e('url') }}" rel="external" target="_blank">Mibbit</a>
 
 <script type="text/javascript">
 $(document).ready(function() {

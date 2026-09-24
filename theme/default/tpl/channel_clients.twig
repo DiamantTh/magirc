@@ -50,7 +50,7 @@ $(document).ready(function() {
         chart: { renderTo: 'chart-clients', type: 'pie' },
         tooltip: {
             formatter: function() {
-                return '<b>'+ this.point.name + (this.point.version ? ' ' + this.point.version : '') +'<\/b>: '+ this.y +'%'+' ('+this.point.count+')';
+                return '<b>'+ escapeTags(this.point.name + (this.point.version ? ' ' + this.point.version : '')) +'<\/b>: '+ this.y +'%'+' ('+this.point.count+')';
             }
         },
         series: [{
@@ -71,7 +71,7 @@ $(document).ready(function() {
             dataLabels: {
                 formatter: function() {
                     var client = this.point.name.substring(0, 12) + (this.point.version ? ' ' + this.point.version : '');
-                    return this.y > 1 ? '<b>' + client.substring(0, 30) + ':</b> '+ this.y +'%'+' ('+this.point.count+')' : null;
+                    return this.y > 1 ? '<b>' + escapeTags(client.substring(0, 30)) + ':</b> '+ this.y +'%'+' ('+this.point.count+')' : null;
                 }
             }
         }]

@@ -36,7 +36,7 @@ $(document).ready(function() {
             if (data) {
                 $("#dialog-server").dialog("option", "title", data.server);
                 $("#srv_description").text(data.description);
-                $("#srv_country").html(getCountryFlag(data) + ' ' + data.country);
+                $("#srv_country").html(getCountryFlag(data) + ' ' + escapeTags(data.country));
                 $("#srv_online").text(data.online ? mLang.Yes : mLang.No);
                 $("#srv_version").text(data.version);
                 $("#srv_uptime").text(getTimeElapsed(data.uptime));

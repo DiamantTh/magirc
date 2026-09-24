@@ -11,6 +11,7 @@ header('Pragma: no-cache');
 require_once(__DIR__ . '/../lib/magirc/ConfigStore.class.php');
 require_once(__DIR__ . '/../lib/magirc/Security.class.php');
 require_once(__DIR__ . '/../lib/magirc/DB.class.php');
+MagircSecurity::sendSecurityHeaders();
 
 define('MAGIRC_CONF_DIR', realpath(__DIR__ . '/../conf'));
 define('MAGIRC_CFG_FILE', MagircConfigStore::path('magirc', MAGIRC_CONF_DIR));
@@ -58,7 +59,7 @@ try {
 $configPresent = is_file(MAGIRC_CFG_FILE) || is_file(__DIR__ . '/../conf/magirc.cfg.php');
 if ($configPresent) {
     try {
-        $setup->db = Magirc_DB::getInstance();
+        $setup->db = MagircDB::getInstance();
         $admins = $setup->checkAdmins();
         $hasSchema = $setup->hasSchema();
         if ($admins === true) {

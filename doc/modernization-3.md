@@ -20,6 +20,6 @@ CKEditor 4 und sein Composer-Paket wurden entfernt. Tiptap Core 3 und StarterKit
 
 ## Tests und Grenzen
 
-Die PHPUnit-Suite enthält Tests für Cache-Hits/Invalidierung und Scopes, ETags/304, Geheimnisredaktion und HTML-Bereinigung. `composer test`, `composer cs`, `composer analyse`, `composer rector:check`, `composer audit`, `composer check-platform-reqs` und `yarn install --frozen-lockfile` laufen unter PHP 8.5 erfolgreich. PHP 8.4 ist als Composer-Plattform festgelegt, konnte in dieser Umgebung jedoch nicht zusätzlich ausgeführt werden.
+Die PHPUnit-Suite enthält Tests für Cache-Hits/Invalidierung und Scopes, ETags/304, Geheimnisredaktion und HTML-Bereinigung. `composer test`, `composer cs`, `composer analyse`, `composer rector:check`, `composer audit`, `composer check-platform-reqs` und `yarn install --frozen-lockfile` laufen unter PHP 8.5 erfolgreich. Die Regression-, Sicherheits- und Installer-Tests liefen zusätzlich unter PHP 8.4.25 in einem temporären Container; ein PHP-8.4-Binary ist auf dem Host nicht installiert.
 
 Die Statistikdienste verwenden weiterhin ihre bestehende Datenbankabstraktion; eine aktive Cache-Invalidierung bei externen Datenbankänderungen ist nicht möglich und erfolgt über die konfigurierten TTLs. Für umfangreiche Rich-Text-Funktionen über StarterKit hinaus müssen erlaubte Tiptap-Erweiterungen und die HTML-Allowlist gemeinsam erweitert werden.

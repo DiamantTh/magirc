@@ -83,7 +83,7 @@
     </tr>
 </table>
 <script type="text/javascript">
-var welcome_msg = '{{ cfg.welcome_mode }}';
+var welcome_msg = '{{ cfg.welcome_mode|e('js') }}';
 $(document).ready(function() {
     if (welcome_msg == 'statuspage') {
         $.get('index.php/content/welcome', function(result) {

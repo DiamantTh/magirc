@@ -9,11 +9,17 @@ use Psr\Log\LoggerInterface;
 
 class AnopeDB extends DB {
     private static $instance;
+    private static ?array $config = null;
+
+    public static function getConfig(): array {
+        self::$config ??= MagircConfigStore::load('anope', PATH_ROOT . 'conf');
+        return self::$config;
+    }
 
     public static function getInstance() {
         if (is_null(self::$instance)) {
             try {
-                $db = MagircConfigStore::load('anope', PATH_ROOT . 'conf');
+                $db = self::getConfig();
             } catch (Exception $exception) {
                 LoggerFactory::get()->error('Anope database configuration could not be loaded.', ['exception_class' => $exception::class]);
                 die('<strong>MagIRC</strong> is not properly configured<br />Please configure the Anope database in the <a href="admin/">Admin Panel</a>');
@@ -50,19 +56,22 @@ class Anope implements Service {
     private readonly StatisticsCache $statisticsCache;
     private readonly LoggerInterface $logger;
 
-    public function __construct(?LoggerInterface $logger = null, ?StatisticsCache $statisticsCache = null) {
+    public function __construct(?LoggerInterface $logger = null, ?StatisticsCache $statisticsCache = null, ?Config $config = null) {
         $this->logger = $logger ?? LoggerFactory::get();
-        $ircd_file = PATH_ROOT . "lib/magirc/ircds/" . IRCD . ".inc.php";
-        if (file_exists($ircd_file)) {
-            require_once($ircd_file);
-        } else {
-            die('<strong>MagIRC</strong> is not properly configured<br />Please configure the ircd in the <a href="admin/">Admin Panel</a>');
+        $ircdDirectory = realpath(PATH_ROOT . 'lib/magirc/ircds');
+        $ircd = (string) (defined('IRCD') ? IRCD : '');
+        $ircd_file = $ircdDirectory !== false && preg_match('/^[A-Za-z0-9_-]+$/D', $ircd)
+            ? realpath($ircdDirectory . DIRECTORY_SEPARATOR . $ircd . '.inc.php')
+            : false;
+        if ($ircdDirectory === false || $ircd_file === false || dirname($ircd_file) !== $ircdDirectory) {
+            throw new RuntimeException('Configured IRC daemon is not supported.');
         }
+        require_once($ircd_file);
         $this->db = AnopeDB::getInstance();
-        $this->cfg = new Config();
+        $this->cfg = $config ?? new Config();
         $dbConfig = [];
         try {
-            $dbConfig = MagircConfigStore::load('anope', PATH_ROOT . 'conf');
+            $dbConfig = AnopeDB::getConfig();
         } catch (\Throwable $exception) {
             $this->logger->warning('Anope cache configuration unavailable.', ['exception_class' => $exception::class]);
         }
@@ -81,7 +90,7 @@ class Anope implements Service {
     }
 
     private function getCurrentStatusUncached() {
-        $query = sprintf("SELECT * FROM `%s`", TBL_CURRENTUSAGE);
+        $query = sprintf("SELECT users, channels, servers, operators, datetime FROM `%s`", TBL_CURRENTUSAGE);
         $this->db->query($query, SQL_INIT, SQL_ASSOC);
         $result = $this->db->record;
         return [
@@ -101,7 +110,7 @@ class Anope implements Service {
     }
 
     private function getMaxValuesUncached() {
-        $this->db->query(sprintf("SELECT * FROM `%s`", TBL_MAXUSAGE), SQL_ALL, SQL_ASSOC);
+        $this->db->query(sprintf("SELECT type, count, datetime FROM `%s`", TBL_MAXUSAGE), SQL_ALL, SQL_ASSOC);
         $data = [];
         foreach ($this->db->record as $row) {
             if ($row['type'] == 'operators') {
@@ -263,6 +272,9 @@ class Anope implements Service {
      * @return array of arrays (string 'name', int 'count', double 'y')
      */
     public function makeCountryPieData($result, $sum) {
+        if ((float) $sum <= 0) {
+            return [];
+        }
         $data = [];
         $unknown = 0;
         $other = 0;
@@ -294,6 +306,9 @@ class Anope implements Service {
      * @return array (clients => (name, count, y), versions (name, version, cat, count, y))
      */
     public function makeClientPieData($result, $sum) {
+        if ((float) $sum <= 0) {
+            return ['clients' => [], 'versions' => []];
+        }
         $clients = [];
         foreach ($result as $client) {
             // Determine client name and version
@@ -321,11 +336,11 @@ class Anope implements Service {
             }
         }
         // Sort by count descending
-        uasort($clients, fn($a, $b) => $a['count'] < $b['count']);
-        foreach ($clients as $key => $val) {
-            arsort($clients[$key]['versions']);
-            unset($val);
+        uasort($clients, fn($a, $b) => $b['count'] <=> $a['count']);
+        foreach ($clients as &$client) {
+            arsort($client['versions']);
         }
+        unset($client);
 
         // Prepare data for output
         $min_count = ceil($sum / 300);

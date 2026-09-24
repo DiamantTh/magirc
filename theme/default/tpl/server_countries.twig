@@ -28,7 +28,7 @@ $(document).ready(function() {
         chart: { renderTo: 'chart-countries' },
         tooltip: {
             formatter: function() {
-                return '<b>'+ this.point.name +'<\/b>: '+ this.y +' %'+' (' + this.point.count +')';
+                return '<b>'+ escapeTags(this.point.name) +'<\/b>: '+ this.y +' %'+' (' + this.point.count +')';
             }
         },
         series: [{
@@ -37,7 +37,7 @@ $(document).ready(function() {
             data: [],
             dataLabels: {
                 formatter: function() {
-                    return '<b>'+ this.point.name +'<\/b>: '+ this.y +' %'+' (' + this.point.count +')';
+                    return '<b>'+ escapeTags(this.point.name) +'<\/b>: '+ this.y +' %'+' (' + this.point.count +')';
                 }
             }
         }]
@@ -48,7 +48,7 @@ $(document).ready(function() {
         "ajax": "rest/service.php/servers/"+target+"/countries?format=datatables",
         "columns": [
             { "data": "country", "render": function(data, type, row, meta) {
-                return getCountryFlag(row) + ' ' + data;
+                return getCountryFlag(row) + ' ' + escapeTags(data);
             } },
             { "data": "count" }
         ]

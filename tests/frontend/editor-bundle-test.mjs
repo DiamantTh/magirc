@@ -2,7 +2,12 @@ import { readFileSync } from 'node:fs';
 
 const bundle = readFileSync(new URL('../../admin/js/welcome-editor.bundle.js', import.meta.url), 'utf8');
 if (!bundle.includes('tiptap-editor') || !bundle.includes('Welcome message')) {
-  throw new Error('The Tiptap welcome editor bundle is missing the expected editor contract.');
+    throw new Error('The Tiptap welcome editor bundle is missing the expected editor contract.');
+}
+for (const marker of ['extension-image', 'extension-link', 'extension-underline']) {
+    if (!bundle.includes(marker)) {
+        throw new Error(`The Tiptap bundle is missing ${marker}.`);
+    }
 }
 if (bundle.includes('CKEDITOR')) {
   throw new Error('The generated editor bundle still contains CKEditor.');

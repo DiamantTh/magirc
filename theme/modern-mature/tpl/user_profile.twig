@@ -15,7 +15,7 @@
 {{ parent() }}
 <script type="text/javascript">
 var target = '{{ target|e('url') }}';
-var mode = '{{ mode }}';
+var mode = '{{ mode|e('js') }}';
 $(document).ready(function() {
     var tabs = mmInitTabs("#tabs");
     $.getJSON('rest/service.php/users/'+mode+'/'+target+'/checkstats', function(data) {

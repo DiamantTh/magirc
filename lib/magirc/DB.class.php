@@ -35,6 +35,15 @@ class DB {
         error_log($message . ' [' . $exception::class . ']');
     }
 
+    /** Quote only application-controlled SQL identifiers; values remain bound/quoted separately. */
+    private function quoteIdentifier($identifier): string
+    {
+        if (!is_string($identifier) || !preg_match('/^[A-Za-z0-9_$.-]+$/D', $identifier)) {
+            throw new InvalidArgumentException('Unsafe SQL identifier.');
+        }
+        return '`' . str_replace('`', '``', $identifier) . '`';
+    }
+
     public function __construct($dsn, $username, $password, $args = null, ?LoggerInterface $logger = null) {
         $this->logger = $logger ?? (class_exists(\MagIRC\Logging\LoggerFactory::class) ? \MagIRC\Logging\LoggerFactory::get() : null);
         $this->connect($dsn, $username, $password, $args);
@@ -211,22 +220,27 @@ class DB {
      * @return mixed
      */
     private function select($table, $where = NULL, $sort = NULL, $order = 'ASC', $limit = 0, $type = SQL_ALL, $format = SQL_ASSOC) {
-        $query = "SELECT * FROM `{$table}`";
+        $query = "SELECT * FROM " . $this->quoteIdentifier($table);
 
         if ($where) {
             $conditions = "";
             foreach($where as $key => $value) {
-                $conditions .= sprintf("`%s` = %s AND ", $key, $this->escape($value));
+                $conditions .= $this->quoteIdentifier($key) . ' = ' . $this->escape($value) . ' AND ';
             }
             $query .= " WHERE " . substr($conditions, 0, -5);
         }
 
         if ($sort) {
-            $query .= " ORDER BY `{$sort}` {$order}";
+            $direction = strtoupper((string) $order) === 'DESC' ? 'DESC' : 'ASC';
+            $query .= ' ORDER BY ' . $this->quoteIdentifier($sort) . ' ' . $direction;
         }
 
         if ($limit) {
-            $query .= " LIMIT {$limit}";
+            $safeLimit = filter_var($limit, FILTER_VALIDATE_INT);
+            if ($safeLimit === false || $safeLimit < 1) {
+                throw new InvalidArgumentException('Unsafe SQL limit.');
+            }
+            $query .= ' LIMIT ' . $safeLimit;
         }
 
         $this->query($query, $type, $format);
@@ -265,10 +279,10 @@ class DB {
      * @return int Last inserted ID
      */
     public function insert($table, $array) {
-        $query = "INSERT INTO `{$table}` SET ";
+        $query = 'INSERT INTO ' . $this->quoteIdentifier($table) . ' SET ';
 
         foreach($array as $key => $value) {
-            $query .= sprintf("`%s` = %s, ", $key, $this->escape($value));
+            $query .= $this->quoteIdentifier($key) . ' = ' . $this->escape($value) . ', ';
         }
         $query = substr($query, 0, -2) . ";";
 
@@ -288,17 +302,17 @@ class DB {
     public function update($table, $array, $where) {
         $data = null;
         foreach($array as $key => $value) {
-            $data .= sprintf("`%s` = %s, ", $key, $this->escape($value));
+            $data .= $this->quoteIdentifier($key) . ' = ' . $this->escape($value) . ', ';
         }
         $data = substr($data, 0, -2);
 
         $conditions = null;
         foreach($where as $key => $value) {
-            $conditions .= sprintf("`%s` = %s AND ", $key, $this->escape($value));
+            $conditions .= $this->quoteIdentifier($key) . ' = ' . $this->escape($value) . ' AND ';
         }
         $conditions = substr($conditions, 0, -5);
 
-        $query = sprintf("UPDATE `%s` SET %s WHERE %s", $table, $data, $conditions);
+        $query = 'UPDATE ' . $this->quoteIdentifier($table) . " SET {$data} WHERE {$conditions}";
 
         return $this->query($query);
     }
@@ -311,13 +325,13 @@ class DB {
      */
     public function delete($table, $data) {
         if (is_array($data)) {
-            $query = "DELETE FROM `{$table}` WHERE ";
+            $query = 'DELETE FROM ' . $this->quoteIdentifier($table) . ' WHERE ';
             foreach($data as $key => $value) {
-                $query .= sprintf("`%s` = %s AND ", $key, $this->escape($value));
+                $query .= $this->quoteIdentifier($key) . ' = ' . $this->escape($value) . ' AND ';
             }
             $query = substr($query, 0, -5);
         } else {
-            $query = sprintf("DELETE FROM `%s` WHERE `id` = %s", $table, $this->escape($data));
+            $query = 'DELETE FROM ' . $this->quoteIdentifier($table) . ' WHERE `id` = ' . $this->escape($data);
         }
         return $this->query($query);
     }

@@ -32,7 +32,7 @@ $(document).ready(function() {
             { data: "users" },
             { data: "users_max" },
             { data: "modes", render: function (data) {
-                return data ? '+' + data : '';
+                return data ? '+' + escapeTags(data) : '';
             } }
         ]
     });

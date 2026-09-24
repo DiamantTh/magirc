@@ -34,6 +34,8 @@ In case you want to migrate from Denora to Anope, we created a script for this t
 
 Run the regression suite with `composer test`; this includes Twig, locale, REST routing, PDO and Anope/Denora checks. The standalone security tests can also be run with `composer test:security`.
 
+Security controls and remaining deployment risks are documented in [doc/security.md](doc/security.md).
+
 ### Using [composer](https://getcomposer.org) and [yarn](https://yarnpkg.com) (recommended) ###
 
 1. Extract or clone the release, then build the locked dependencies and public assets:

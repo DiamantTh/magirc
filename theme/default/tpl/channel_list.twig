@@ -33,7 +33,7 @@ $(document).ready(function() {
             { "data": "users", "searchable": false },
             { "data": "users_max", "searchable": false },
             { "data": "modes", "searchable": false, "orderable": false, "render": function (data) {
-                return data ? '+' + data : '';
+                return data ? '+' + escapeTags(data) : '';
             } }
         ]
     });

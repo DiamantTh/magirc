@@ -65,6 +65,16 @@ final class HtmlSanitizer
 
     private static function safeUrl(string $url): bool
     {
-        return !preg_match('/^(?:javascript|vbscript|data):/i', preg_replace('/\s+/', '', $url));
+        $normalized = preg_replace('/\s+/', '', $url);
+        if (!is_string($normalized) || $normalized === '') {
+            return false;
+        }
+        $normalized = str_replace('\\', '/', $normalized);
+        if (preg_match('/^([a-z][a-z0-9+.-]*):/i', $normalized, $matches)) {
+            return in_array(strtolower($matches[1]), ['http', 'https', 'mailto'], true);
+        }
+        // Relative links and same-origin fragments are safe; protocol-relative
+        // URLs would bypass the configured origin and are therefore rejected.
+        return !str_starts_with($normalized, '//');
     }
 }

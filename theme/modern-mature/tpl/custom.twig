@@ -7,14 +7,14 @@
         <h1>{{ example }}!</h1>
 
         <ul>
-        {% for channel in channels}
+        {% for channel in channels %}
             <li>{{ channel.channel }}</li>
         {% endfor %}
         </ul>
     </div>
 {% endblock %}
 
-{%block js}
+{% block js %}
 {{ parent() }}
 <script type="text/javascript">
 

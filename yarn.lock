@@ -192,12 +192,17 @@
   resolved "https://registry.yarnpkg.com/@tiptap/extension-horizontal-rule/-/extension-horizontal-rule-3.31.3.tgz#80489705268299a8630831e95ec3b0514a667cb9"
   integrity sha512-YnHGy2KShRwvCseAmmxl9VP7R0qaj8QMp3DA6DJWZqp7r5gLGvDkAqhedxqqefqsE4Y43hjkBdjtB9Ce78LkIw==
 
+"@tiptap/extension-image@^3.31.3":
+  version "3.31.3"
+  resolved "https://registry.yarnpkg.com/@tiptap/extension-image/-/extension-image-3.31.3.tgz#751f7a93b81fc560fa9173cd5eb6aa3c72809bc5"
+  integrity sha512-wWNG9BOtx2Cg4vwxPVGDIJ5DGX+ETkldeoaFJLB1NXUL4OPUiVTf8cHZ+hdYgJWP704BEB7jQgjlpvdi6VigTg==
+
 "@tiptap/extension-italic@3.31.3":
   version "3.31.3"
   resolved "https://registry.yarnpkg.com/@tiptap/extension-italic/-/extension-italic-3.31.3.tgz#8286a6f3a36e1ca2ca4b19fb6fb31e5d0aee306f"
   integrity sha512-ibGvdvAPyfxBMUVNRI43eb9h2/Jka1MRG5GtnGqbcCX/2+Y/y0EOfFrPQPkuYphiWQYyu9+FzPKMB/pjuaLuKQ==
 
-"@tiptap/extension-link@3.31.3":
+"@tiptap/extension-link@3.31.3", "@tiptap/extension-link@^3.31.3":
   version "3.31.3"
   resolved "https://registry.yarnpkg.com/@tiptap/extension-link/-/extension-link-3.31.3.tgz#1b14e5563a1c618b33f162e5011001aa783ef61c"
   integrity sha512-986wOQzTL9Zr5lf84LCLpm+YOms8A0K39/8DVoqRfebqcOe0/eq4bnztmAlfabOd+kJY92g3AgZERFUx/w+dcw==
@@ -239,7 +244,7 @@
   resolved "https://registry.yarnpkg.com/@tiptap/extension-text/-/extension-text-3.31.3.tgz#20502cfcc25d8191f69934792185a4186c28cf66"
   integrity sha512-gdsWtF+taeaCu6V+5Ct10fGo0ACUy1GnYtbb+mcathBt8OqbT+Ws60p/yEmKesBDz2Hn+B5IcWy6+2BBZl5ZTg==
 
-"@tiptap/extension-underline@3.31.3":
+"@tiptap/extension-underline@3.31.3", "@tiptap/extension-underline@^3.31.3":
   version "3.31.3"
   resolved "https://registry.yarnpkg.com/@tiptap/extension-underline/-/extension-underline-3.31.3.tgz#c238037fc6b1e708beaaef5d922802f8ebbf3fb2"
   integrity sha512-HghdJaOwRqYzsAxqSyNyb+IWyOMcdCl8IoiBETA9BZCJAqdXzFLcuWp7CqCqJPam9dgkWosSoHqTCAO4nTBfpw==
@@ -249,7 +254,7 @@
   resolved "https://registry.yarnpkg.com/@tiptap/extensions/-/extensions-3.31.3.tgz#f94a6a154d9fb3849db92a64b43e197d255c89cb"
   integrity sha512-8sJNPGGUe8f3aDojcOW5cfVL7I5NrBbE0UWxG08qoi9Tea6qWbvQJsCR9tsrOapr/DaLr3kpbGZ9s1gEEfcNcA==
 
-"@tiptap/pm@3.31.3":
+"@tiptap/pm@3.31.3", "@tiptap/pm@^3.31.3":
   version "3.31.3"
   resolved "https://registry.yarnpkg.com/@tiptap/pm/-/pm-3.31.3.tgz#e5bd2fac567a5d62aa016572f9747c8901108e20"
   integrity sha512-sZime0SWsz/k62W2WvHx5Ig7G2h7kVhrrmnqy+wEgIHfDwEfOlelRjaWCiBCFlF7dxGUntJusCh9FxlLhni0Ag==

@@ -23,6 +23,10 @@
   },
   "devDependencies": {
     "@tiptap/core": "^3.31.3",
+    "@tiptap/extension-image": "^3.31.3",
+    "@tiptap/extension-link": "^3.31.3",
+    "@tiptap/extension-underline": "^3.31.3",
+    "@tiptap/pm": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
     "esbuild": "^0.25.0"
   },

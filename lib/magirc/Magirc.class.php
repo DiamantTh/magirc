@@ -40,7 +40,17 @@ class Magirc {
         }
 
         if ($useTemplateEngine) {
-            $templatePath = __DIR__ . '/../../theme/' . $this->cfg->theme . '/tpl';
+            $themeRoot = realpath(__DIR__ . '/../../theme');
+            $themeName = basename((string) $this->cfg->theme);
+            $templatePath = $themeRoot === false ? false : realpath($themeRoot . DIRECTORY_SEPARATOR . $themeName . DIRECTORY_SEPARATOR . 'tpl');
+            if ($themeRoot === false || $templatePath === false || !str_starts_with($templatePath, $themeRoot . DIRECTORY_SEPARATOR)) {
+                $themeName = 'default';
+                $templatePath = realpath($themeRoot . '/default/tpl');
+                $this->cfg->theme = $themeName;
+            }
+            if ($templatePath === false) {
+                throw new RuntimeException('No valid theme template directory is available.');
+            }
             $view = \Slim\Views\Twig::create($templatePath, [
                 'cache' => __DIR__ . '/../../tmp/twig',
                 'debug' => false,
@@ -92,6 +102,7 @@ class Magirc {
                 return $response->withStatus(500)->withHeader('Content-Type', 'text/plain; charset=utf-8');
             }
         });
+        $app->add(new \MagIRC\Http\SecurityHeadersMiddleware());
 
         return $app;
     }
@@ -124,10 +135,10 @@ class Magirc {
         switch($this->cfg->service) {
             case 'anope':
                 require_once(__DIR__.'/../../lib/magirc/services/Anope.class.php');
-                return new Anope();
+                return new Anope(null, null, $this->cfg);
             case 'denora':
                 require_once(__DIR__.'/../../lib/magirc/services/Denora.class.php');
-                return new Denora();
+                return new Denora(null, null, $this->cfg);
             default:
                 return null;
         }
@@ -208,7 +219,11 @@ class Magirc {
         $ps = $this->db->prepare("SELECT text FROM magirc_content WHERE name = :name");
         $ps->bindParam(':name', $name, PDO::PARAM_STR);
         $ps->execute();
-        return $ps->fetch(PDO::FETCH_COLUMN);
+        $content = $ps->fetch(PDO::FETCH_COLUMN);
+        if ($name === 'welcome') {
+            return \MagIRC\Security\HtmlSanitizer::sanitize((string) $content);
+        }
+        return $content;
     }
 
     /**
@@ -234,12 +249,14 @@ class Magirc {
      * @return boolean true: valid session, false: invalid or no session
      */
     public function sessionStatus() {
-        if (!isset($_SESSION["loginUsername"])) {
-            $_SESSION["message"] = "Access denied";
+        MagircSecurity::startSession();
+        if (!isset($_SESSION['username']) || !is_string($_SESSION['username'])) {
             return false;
         }
-        if (!isset($_SESSION["loginIP"]) || ($_SESSION["loginIP"] != $_SERVER["REMOTE_ADDR"])) {
-            $_SESSION["message"] = "Access denied";
+        if (!isset($_SESSION['ipaddr']) || !is_string($_SESSION['ipaddr'])
+            || $_SESSION['ipaddr'] !== (is_scalar($_SERVER['REMOTE_ADDR'] ?? null) ? (string) $_SERVER['REMOTE_ADDR'] : '')
+            || !MagircSecurity::sessionIsFresh()) {
+            MagircSecurity::destroySession();
             return false;
         }
         return true;
@@ -255,7 +272,7 @@ class Magirc {
         $out = '';
 
         foreach ($lines as $line) {
-            $line = nl2br(htmlentities(mb_convert_encoding($line, 'ISO-8859-1'), ENT_COMPAT));
+            $line = nl2br(htmlentities(mb_convert_encoding($line, 'ISO-8859-1'), ENT_QUOTES | ENT_SUBSTITUTE, 'ISO-8859-1'));
             // replace control codes
             $line = preg_replace_callback('/[\003](\d{0,2})(,\d{1,2})?([^\003\x0F]*)(?:[\003](?!\d))?/', function($matches) {
                         $colors = ['#FFFFFF', '#000000', '#00007F', '#009300', '#FF0000', '#7F0000', '#9C009C', '#FC7F00', '#FFFF00', '#00FC00', '#009393', '#00FFFF', '#0000FC', '#FF00FF', '#7F7F7F', '#D2D2D2'];
@@ -282,7 +299,7 @@ class Magirc {
             $line = preg_replace('/[\x1F]([^\x1F\x0F]*)(?:[\x1F])?/', '<span style="text-decoration: underline;">$1</span>', $line);
             $line = preg_replace('/[\x12]([^\x12\x0F]*)(?:[\x12])?/', '<span style="text-decoration: line-through;">$1</span>', $line);
             $line = preg_replace('/[\x16]([^\x16\x0F]*)(?:[\x16])?/', '<span style="font-style: italic;">$1</span>', $line);
-            $line = preg_replace('@(https?://([-\w\.]+)+(:\d+)?(/([\S+]*(\?\S+)?)?)?)@', "<a href='$1' class='topic'>$1</a>", $line);
+            $line = preg_replace_callback('~https?://[^\s<>"\']+~i', static fn(array $matches): string => '<a href="' . $matches[0] . '" class="topic">' . $matches[0] . '</a>', $line);
             // remove dirt
             $line = preg_replace('/[\x00-\x1F]/', '', $line);
             $line = preg_replace('/[\x7F-\xFF]/', '', $line);

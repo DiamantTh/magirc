@@ -16961,6 +16961,459 @@ img.ProseMirror-separator {
       undoable: config.undoable
     });
   }
+  var isTouchEvent = (e) => {
+    return "touches" in e;
+  };
+  var ResizableNodeView = class {
+    /**
+    * Creates a new ResizableNodeView instance.
+    *
+    * The constructor sets up the resize handles, applies initial sizing from
+    * node attributes, and configures all resize behavior options.
+    *
+    * @param options - Configuration options for the resizable node view
+    */
+    constructor(options) {
+      var _options$options, _options$options2, _options$options3, _options$options4, _options$options5, _options$options6;
+      this.directions = [
+        "bottom-left",
+        "bottom-right",
+        "top-left",
+        "top-right"
+      ];
+      this.minSize = {
+        height: 8,
+        width: 8
+      };
+      this.preserveAspectRatio = false;
+      this.classNames = {
+        container: "",
+        wrapper: "",
+        handle: "",
+        resizing: ""
+      };
+      this.initialWidth = 0;
+      this.initialHeight = 0;
+      this.aspectRatio = 1;
+      this.isResizing = false;
+      this.activeHandle = null;
+      this.startX = 0;
+      this.startY = 0;
+      this.startWidth = 0;
+      this.startHeight = 0;
+      this.isShiftKeyPressed = false;
+      this.lastEditableState = void 0;
+      this.handleMap = /* @__PURE__ */ new Map();
+      this.handleMouseMove = (event) => {
+        if (!this.isResizing || !this.activeHandle) return;
+        const deltaX = event.clientX - this.startX;
+        const deltaY = event.clientY - this.startY;
+        this.handleResize(deltaX, deltaY);
+      };
+      this.handleTouchMove = (event) => {
+        if (!this.isResizing || !this.activeHandle) return;
+        const touch = event.touches[0];
+        if (!touch) return;
+        const deltaX = touch.clientX - this.startX;
+        const deltaY = touch.clientY - this.startY;
+        this.handleResize(deltaX, deltaY);
+      };
+      this.handleMouseUp = () => {
+        if (!this.isResizing) return;
+        const finalWidth = this.element.offsetWidth;
+        const finalHeight = this.element.offsetHeight;
+        this.onCommit(finalWidth, finalHeight);
+        this.isResizing = false;
+        this.activeHandle = null;
+        this.container.dataset.resizeState = "false";
+        if (this.classNames.resizing) this.container.classList.remove(this.classNames.resizing);
+        document.removeEventListener("mousemove", this.handleMouseMove);
+        document.removeEventListener("mouseup", this.handleMouseUp);
+        document.removeEventListener("keydown", this.handleKeyDown);
+        document.removeEventListener("keyup", this.handleKeyUp);
+      };
+      this.handleKeyDown = (event) => {
+        if (event.key === "Shift") this.isShiftKeyPressed = true;
+      };
+      this.handleKeyUp = (event) => {
+        if (event.key === "Shift") this.isShiftKeyPressed = false;
+      };
+      this.node = options.node;
+      this.editor = options.editor;
+      this.element = options.element;
+      this.element.draggable = false;
+      this.contentElement = options.contentElement;
+      this.getPos = options.getPos;
+      this.onResize = options.onResize;
+      this.onCommit = options.onCommit;
+      this.onUpdate = options.onUpdate;
+      if ((_options$options = options.options) === null || _options$options === void 0 ? void 0 : _options$options.min) this.minSize = {
+        ...this.minSize,
+        ...options.options.min
+      };
+      if ((_options$options2 = options.options) === null || _options$options2 === void 0 ? void 0 : _options$options2.max) this.maxSize = options.options.max;
+      if (options === null || options === void 0 || (_options$options3 = options.options) === null || _options$options3 === void 0 ? void 0 : _options$options3.directions) this.directions = options.options.directions;
+      if ((_options$options4 = options.options) === null || _options$options4 === void 0 ? void 0 : _options$options4.preserveAspectRatio) this.preserveAspectRatio = options.options.preserveAspectRatio;
+      if ((_options$options5 = options.options) === null || _options$options5 === void 0 ? void 0 : _options$options5.className) this.classNames = {
+        container: options.options.className.container || "",
+        wrapper: options.options.className.wrapper || "",
+        handle: options.options.className.handle || "",
+        resizing: options.options.className.resizing || ""
+      };
+      if ((_options$options6 = options.options) === null || _options$options6 === void 0 ? void 0 : _options$options6.createCustomHandle) this.createCustomHandle = options.options.createCustomHandle;
+      this.wrapper = this.createWrapper();
+      this.container = this.createContainer();
+      this.applyInitialSize();
+      this.attachHandles();
+      this.editor.on("update", this.handleEditorUpdate.bind(this));
+    }
+    /**
+    * Returns the top-level DOM node that should be placed in the editor.
+    *
+    * This is required by the ProseMirror NodeView interface. The container
+    * includes the wrapper, handles, and the actual content element.
+    *
+    * @returns The container element to be inserted into the editor
+    */
+    get dom() {
+      return this.container;
+    }
+    get contentDOM() {
+      var _this$contentElement;
+      return (_this$contentElement = this.contentElement) !== null && _this$contentElement !== void 0 ? _this$contentElement : null;
+    }
+    handleEditorUpdate() {
+      const isEditable = this.editor.isEditable;
+      if (isEditable === this.lastEditableState) return;
+      this.lastEditableState = isEditable;
+      if (!isEditable) this.removeHandles();
+      else if (isEditable && this.handleMap.size === 0) this.attachHandles();
+    }
+    /**
+    * Called when the node's content or attributes change.
+    *
+    * Updates the internal node reference. If a custom `onUpdate` callback
+    * was provided, it will be called to handle additional update logic.
+    *
+    * @param node - The new/updated node
+    * @param decorations - Node decorations
+    * @param innerDecorations - Inner decorations
+    * @returns `false` if the node type has changed (requires full rebuild), otherwise the result of `onUpdate` or `true`
+    */
+    update(node, decorations, innerDecorations) {
+      if (node.type !== this.node.type) return false;
+      this.node = node;
+      if (this.onUpdate) return this.onUpdate(node, decorations, innerDecorations);
+      return true;
+    }
+    /**
+    * Cleanup method called when the node view is being removed.
+    *
+    * Removes all event listeners to prevent memory leaks. This is required
+    * by the ProseMirror NodeView interface. If a resize is active when
+    * destroy is called, it will be properly cancelled.
+    */
+    destroy() {
+      if (this.isResizing) {
+        this.container.dataset.resizeState = "false";
+        if (this.classNames.resizing) this.container.classList.remove(this.classNames.resizing);
+        document.removeEventListener("mousemove", this.handleMouseMove);
+        document.removeEventListener("mouseup", this.handleMouseUp);
+        document.removeEventListener("keydown", this.handleKeyDown);
+        document.removeEventListener("keyup", this.handleKeyUp);
+        this.isResizing = false;
+        this.activeHandle = null;
+      }
+      this.editor.off("update", this.handleEditorUpdate.bind(this));
+      this.container.remove();
+    }
+    /**
+    * Creates the outer container element.
+    *
+    * The container is the top-level element returned by the NodeView and
+    * wraps the entire resizable node. It's set up with flexbox to handle
+    * alignment and includes data attributes for styling and identification.
+    *
+    * @returns The container element
+    */
+    createContainer() {
+      const element = document.createElement("div");
+      element.dataset.resizeContainer = "";
+      element.dataset.node = this.node.type.name;
+      element.style.display = this.node.type.isInline ? "inline-flex" : "flex";
+      if (this.classNames.container) element.className = this.classNames.container;
+      element.appendChild(this.wrapper);
+      return element;
+    }
+    /**
+    * Creates the wrapper element that contains the content and handles.
+    *
+    * The wrapper uses relative positioning so that resize handles can be
+    * positioned absolutely within it. This is the direct parent of the
+    * content element being made resizable.
+    *
+    * @returns The wrapper element
+    */
+    createWrapper() {
+      const element = document.createElement("div");
+      element.style.position = "relative";
+      element.style.display = "block";
+      element.dataset.resizeWrapper = "";
+      if (this.classNames.wrapper) element.className = this.classNames.wrapper;
+      element.appendChild(this.element);
+      return element;
+    }
+    /**
+    * Creates a resize handle element for a specific direction.
+    *
+    * Each handle is absolutely positioned and includes a data attribute
+    * identifying its direction for styling purposes.
+    *
+    * @param direction - The resize direction for this handle
+    * @returns The handle element
+    */
+    createHandle(direction) {
+      const handle = document.createElement("div");
+      handle.dataset.resizeHandle = direction;
+      handle.style.position = "absolute";
+      if (this.classNames.handle) handle.className = this.classNames.handle;
+      return handle;
+    }
+    /**
+    * Positions a handle element according to its direction.
+    *
+    * Corner handles (e.g., 'top-left') are positioned at the intersection
+    * of two edges. Edge handles (e.g., 'top') span the full width or height.
+    *
+    * @param handle - The handle element to position
+    * @param direction - The direction determining the position
+    */
+    positionHandle(handle, direction) {
+      const isTop = direction.includes("top");
+      const isBottom = direction.includes("bottom");
+      const isLeft = direction.includes("left");
+      const isRight = direction.includes("right");
+      if (isTop) handle.style.top = "0";
+      if (isBottom) handle.style.bottom = "0";
+      if (isLeft) handle.style.left = "0";
+      if (isRight) handle.style.right = "0";
+      if (direction === "top" || direction === "bottom") {
+        handle.style.left = "0";
+        handle.style.right = "0";
+      }
+      if (direction === "left" || direction === "right") {
+        handle.style.top = "0";
+        handle.style.bottom = "0";
+      }
+    }
+    /**
+    * Creates and attaches all resize handles to the wrapper.
+    *
+    * Iterates through the configured directions, creates a handle for each,
+    * positions it, attaches the mousedown listener, and appends it to the DOM.
+    */
+    attachHandles() {
+      this.directions.forEach((direction) => {
+        let handle;
+        if (this.createCustomHandle) handle = this.createCustomHandle(direction);
+        else handle = this.createHandle(direction);
+        if (!(handle instanceof HTMLElement)) {
+          console.warn(`[ResizableNodeView] createCustomHandle("${direction}") did not return an HTMLElement. Falling back to default handle.`);
+          handle = this.createHandle(direction);
+        }
+        if (!this.createCustomHandle) this.positionHandle(handle, direction);
+        handle.addEventListener("mousedown", (event) => this.handleResizeStart(event, direction));
+        handle.addEventListener("touchstart", (event) => this.handleResizeStart(event, direction));
+        this.handleMap.set(direction, handle);
+        this.wrapper.appendChild(handle);
+      });
+    }
+    /**
+    * Removes all resize handles from the wrapper.
+    *
+    * Cleans up the handle map and removes each handle element from the DOM.
+    */
+    removeHandles() {
+      this.handleMap.forEach((el) => el.remove());
+      this.handleMap.clear();
+    }
+    /**
+    * Applies initial sizing from node attributes to the element.
+    *
+    * If width/height attributes exist on the node, they're applied to the element.
+    * Otherwise, the element's natural/current dimensions are measured. The aspect
+    * ratio is calculated for later use in aspect-ratio-preserving resizes.
+    */
+    applyInitialSize() {
+      const width = this.node.attrs.width;
+      const height = this.node.attrs.height;
+      if (width) {
+        this.element.style.width = `${width}px`;
+        this.initialWidth = width;
+      } else this.initialWidth = this.element.offsetWidth;
+      if (height) {
+        this.element.style.height = `${height}px`;
+        this.initialHeight = height;
+      } else this.initialHeight = this.element.offsetHeight;
+      if (this.initialWidth > 0 && this.initialHeight > 0) this.aspectRatio = this.initialWidth / this.initialHeight;
+    }
+    /**
+    * Initiates a resize operation when a handle is clicked.
+    *
+    * Captures the starting mouse position and element dimensions, sets up
+    * the resize state, adds the resizing class and state attribute, and
+    * attaches document-level listeners for mouse movement and keyboard input.
+    *
+    * @param event - The mouse down event
+    * @param direction - The direction of the handle being dragged
+    */
+    handleResizeStart(event, direction) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.isResizing = true;
+      this.activeHandle = direction;
+      if (isTouchEvent(event)) {
+        this.startX = event.touches[0].clientX;
+        this.startY = event.touches[0].clientY;
+      } else {
+        this.startX = event.clientX;
+        this.startY = event.clientY;
+      }
+      this.startWidth = this.element.offsetWidth;
+      this.startHeight = this.element.offsetHeight;
+      if (this.startWidth > 0 && this.startHeight > 0) this.aspectRatio = this.startWidth / this.startHeight;
+      if (this.getPos() !== void 0) {
+      }
+      this.container.dataset.resizeState = "true";
+      if (this.classNames.resizing) this.container.classList.add(this.classNames.resizing);
+      document.addEventListener("mousemove", this.handleMouseMove);
+      document.addEventListener("touchmove", this.handleTouchMove);
+      document.addEventListener("mouseup", this.handleMouseUp);
+      document.addEventListener("keydown", this.handleKeyDown);
+      document.addEventListener("keyup", this.handleKeyUp);
+    }
+    handleResize(deltaX, deltaY) {
+      if (!this.activeHandle) return;
+      const shouldPreserveAspectRatio = this.preserveAspectRatio || this.isShiftKeyPressed;
+      const { width, height } = this.calculateNewDimensions(this.activeHandle, deltaX, deltaY);
+      const constrained = this.applyConstraints(width, height, shouldPreserveAspectRatio);
+      this.element.style.width = `${constrained.width}px`;
+      this.element.style.height = `${constrained.height}px`;
+      if (this.onResize) this.onResize(constrained.width, constrained.height);
+    }
+    /**
+    * Calculates new dimensions based on mouse delta and resize direction.
+    *
+    * Takes the starting dimensions and applies the mouse movement delta
+    * according to the handle direction. For corner handles, both dimensions
+    * are affected. For edge handles, only one dimension changes. If aspect
+    * ratio should be preserved, delegates to applyAspectRatio.
+    *
+    * @param direction - The active resize handle direction
+    * @param deltaX - Horizontal mouse movement since resize start
+    * @param deltaY - Vertical mouse movement since resize start
+    * @returns The calculated width and height
+    */
+    calculateNewDimensions(direction, deltaX, deltaY) {
+      let newWidth = this.startWidth;
+      let newHeight = this.startHeight;
+      const isRight = direction.includes("right");
+      const isLeft = direction.includes("left");
+      const isBottom = direction.includes("bottom");
+      const isTop = direction.includes("top");
+      if (isRight) newWidth = this.startWidth + deltaX;
+      else if (isLeft) newWidth = this.startWidth - deltaX;
+      if (isBottom) newHeight = this.startHeight + deltaY;
+      else if (isTop) newHeight = this.startHeight - deltaY;
+      if (direction === "right" || direction === "left") newWidth = this.startWidth + (isRight ? deltaX : -deltaX);
+      if (direction === "top" || direction === "bottom") newHeight = this.startHeight + (isBottom ? deltaY : -deltaY);
+      if (this.preserveAspectRatio || this.isShiftKeyPressed) return this.applyAspectRatio(newWidth, newHeight, direction);
+      return {
+        width: newWidth,
+        height: newHeight
+      };
+    }
+    /**
+    * Applies min/max constraints to dimensions.
+    *
+    * When aspect ratio is NOT preserved, constraints are applied independently
+    * to width and height. When aspect ratio IS preserved, constraints are
+    * applied while maintaining the aspect ratio—if one dimension hits a limit,
+    * the other is recalculated proportionally.
+    *
+    * This ensures that aspect ratio is never broken when constrained.
+    *
+    * @param width - The unconstrained width
+    * @param height - The unconstrained height
+    * @param preserveAspectRatio - Whether to maintain aspect ratio while constraining
+    * @returns The constrained dimensions
+    */
+    applyConstraints(width, height, preserveAspectRatio) {
+      var _this$maxSize3, _this$maxSize4;
+      if (!preserveAspectRatio) {
+        var _this$maxSize, _this$maxSize2;
+        let constrainedWidth2 = Math.max(this.minSize.width, width);
+        let constrainedHeight2 = Math.max(this.minSize.height, height);
+        if ((_this$maxSize = this.maxSize) === null || _this$maxSize === void 0 ? void 0 : _this$maxSize.width) constrainedWidth2 = Math.min(this.maxSize.width, constrainedWidth2);
+        if ((_this$maxSize2 = this.maxSize) === null || _this$maxSize2 === void 0 ? void 0 : _this$maxSize2.height) constrainedHeight2 = Math.min(this.maxSize.height, constrainedHeight2);
+        return {
+          width: constrainedWidth2,
+          height: constrainedHeight2
+        };
+      }
+      let constrainedWidth = width;
+      let constrainedHeight = height;
+      if (constrainedWidth < this.minSize.width) {
+        constrainedWidth = this.minSize.width;
+        constrainedHeight = constrainedWidth / this.aspectRatio;
+      }
+      if (constrainedHeight < this.minSize.height) {
+        constrainedHeight = this.minSize.height;
+        constrainedWidth = constrainedHeight * this.aspectRatio;
+      }
+      if (((_this$maxSize3 = this.maxSize) === null || _this$maxSize3 === void 0 ? void 0 : _this$maxSize3.width) && constrainedWidth > this.maxSize.width) {
+        constrainedWidth = this.maxSize.width;
+        constrainedHeight = constrainedWidth / this.aspectRatio;
+      }
+      if (((_this$maxSize4 = this.maxSize) === null || _this$maxSize4 === void 0 ? void 0 : _this$maxSize4.height) && constrainedHeight > this.maxSize.height) {
+        constrainedHeight = this.maxSize.height;
+        constrainedWidth = constrainedHeight * this.aspectRatio;
+      }
+      return {
+        width: constrainedWidth,
+        height: constrainedHeight
+      };
+    }
+    /**
+    * Adjusts dimensions to maintain the original aspect ratio.
+    *
+    * For horizontal handles (left/right), uses width as the primary dimension
+    * and calculates height from it. For vertical handles (top/bottom), uses
+    * height as primary and calculates width. For corner handles, uses width
+    * as the primary dimension.
+    *
+    * @param width - The new width
+    * @param height - The new height
+    * @param direction - The active resize direction
+    * @returns Dimensions adjusted to preserve aspect ratio
+    */
+    applyAspectRatio(width, height, direction) {
+      const isHorizontal = direction === "left" || direction === "right";
+      const isVertical = direction === "top" || direction === "bottom";
+      if (isHorizontal) return {
+        width,
+        height: width / this.aspectRatio
+      };
+      if (isVertical) return {
+        width: height * this.aspectRatio,
+        height
+      };
+      return {
+        width,
+        height: width / this.aspectRatio
+      };
+    }
+  };
   var Node2 = class Node3 extends Extendable {
     constructor(..._args) {
       super(..._args);
@@ -17009,830 +17462,165 @@ img.ProseMirror-separator {
     });
   }
 
-  // node_modules/@tiptap/core/dist/jsx-runtime/jsx-runtime.js
-  var jsxElements = /* @__PURE__ */ new WeakSet();
-  var jsxFragments = /* @__PURE__ */ new WeakSet();
-  function createJSXElement(spec) {
-    const element = spec;
-    jsxElements.add(element);
-    return element;
-  }
-  function isJSXElement(value) {
-    return Array.isArray(value) && jsxElements.has(value);
-  }
-  function flattenFragmentChildren(children) {
-    return children.flatMap((child) => {
-      if (child == null) return [];
-      if (Array.isArray(child) && jsxFragments.has(child) && !isJSXElement(child)) return flattenFragmentChildren(child);
-      return [child];
-    });
-  }
-  function render(tag, attributes) {
-    if (tag === "slot") return 0;
-    if (tag instanceof Function) {
-      const result = tag(attributes);
-      if (Array.isArray(result) && !isJSXElement(result) && !jsxFragments.has(result)) return createJSXElement(result);
-      return result;
-    }
-    const { children, ...rest } = attributes !== null && attributes !== void 0 ? attributes : {};
-    if (tag === "svg") throw new Error("SVG elements are not supported in the JSX syntax, use the array syntax instead");
-    if (Array.isArray(children)) {
-      if (isJSXElement(children)) return createJSXElement([
-        tag,
-        rest,
-        children
-      ]);
-      if (children.length === 0) return createJSXElement([tag, rest]);
-      const flattenedChildren = flattenFragmentChildren(children);
-      if (flattenedChildren.length === 0) return createJSXElement([tag, rest]);
-      return createJSXElement([
-        tag,
-        rest,
-        ...flattenedChildren
-      ]);
-    }
-    if (children !== void 0 && children !== null) return createJSXElement([
-      tag,
-      rest,
-      children
-    ]);
-    return createJSXElement([tag, rest]);
-  }
-  var h = (tag, attributes) => render(tag, attributes);
-
-  // node_modules/@tiptap/extension-blockquote/dist/index.js
-  var handleBackspace = (editor, type) => {
-    var _previous$lastChild;
-    const { state } = editor;
-    const { selection } = state;
-    if (!selection.empty) return false;
-    const { $from } = selection;
-    if ($from.parentOffset !== 0) return false;
-    const parentDepth = $from.depth - 1;
-    if (parentDepth < 0) return false;
-    const parent = $from.node(parentDepth);
-    const index = $from.index(parentDepth);
-    if (index === 0) return false;
-    if (parent.type === type) return editor.commands.lift(type.name);
-    const previous = parent.child(index - 1);
-    if (previous.type !== type || !((_previous$lastChild = previous.lastChild) === null || _previous$lastChild === void 0 ? void 0 : _previous$lastChild.isTextblock)) return false;
-    const targetPos = $from.before() - 1 - 1;
-    return editor.commands.command(({ tr: tr2, dispatch }) => {
-      if (!dispatch) return true;
-      const content = $from.parent.content;
-      const slice2 = new Slice(content, 0, 0);
-      tr2.replace(targetPos, $from.after(), slice2);
-      tr2.setSelection(TextSelection.create(tr2.doc, targetPos + content.size));
-      tr2.scrollIntoView();
-      dispatch(tr2);
-      return true;
-    });
-  };
-  var inputRegex = /^\s*>\s$/;
-  var Blockquote = Node2.create({
-    name: "blockquote",
-    addOptions() {
-      return { HTMLAttributes: {} };
-    },
-    content: "block+",
-    group: "block",
-    defining: true,
-    parseHTML() {
-      return [{ tag: "blockquote" }];
-    },
-    renderHTML({ HTMLAttributes }) {
-      return /* @__PURE__ */ h("blockquote", {
-        ...mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
-        children: /* @__PURE__ */ h("slot", {})
-      });
-    },
-    parseMarkdown: (token, helpers) => {
-      var _helpers$parseBlockCh;
-      const parseBlockChildren = (_helpers$parseBlockCh = helpers.parseBlockChildren) !== null && _helpers$parseBlockCh !== void 0 ? _helpers$parseBlockCh : helpers.parseChildren;
-      return helpers.createNode("blockquote", void 0, parseBlockChildren(token.tokens || []));
-    },
-    renderMarkdown: (node, h2) => {
-      if (!node.content) return "";
-      const prefix = ">";
-      const result = [];
-      node.content.forEach((child, index) => {
-        var _h$renderChild, _h$renderChild2;
-        const linesWithPrefix = ((_h$renderChild = (_h$renderChild2 = h2.renderChild) === null || _h$renderChild2 === void 0 ? void 0 : _h$renderChild2.call(h2, child, index)) !== null && _h$renderChild !== void 0 ? _h$renderChild : h2.renderChildren([child])).split("\n").map((line) => {
-          if (line.trim() === "") return prefix;
-          return `${prefix} ${line}`;
-        });
-        result.push(linesWithPrefix.join("\n"));
-      });
-      return result.join(`
-${prefix}
-`);
-    },
-    addCommands() {
-      return {
-        setBlockquote: () => ({ commands }) => {
-          return commands.wrapIn(this.name);
-        },
-        toggleBlockquote: () => ({ commands }) => {
-          return commands.toggleWrap(this.name);
-        },
-        unsetBlockquote: () => ({ commands }) => {
-          return commands.lift(this.name);
-        }
-      };
-    },
-    addKeyboardShortcuts() {
-      return {
-        "Mod-Shift-b": () => this.editor.commands.toggleBlockquote(),
-        Backspace: () => handleBackspace(this.editor, this.type)
-      };
-    },
-    addInputRules() {
-      return [wrappingInputRule({
-        find: inputRegex,
-        type: this.type
-      })];
-    }
-  });
-
-  // node_modules/@tiptap/extension-bold/dist/index.js
-  var starInputRegex = /(?:^|\s)(\*\*(?!\s+\*\*)((?:[^*]+))\*\*(?!\s+\*\*))$/;
-  var starPasteRegex = /(?:^|\s)(\*\*(?!\s+\*\*)((?:[^*]+))\*\*(?!\s+\*\*))/g;
-  var underscoreInputRegex = /(?:^|\s)(__(?!\s+__)((?:[^_]+))__(?!\s+__))$/;
-  var underscorePasteRegex = /(?:^|\s)(__(?!\s+__)((?:[^_]+))__(?!\s+__))/g;
-  var Bold = Mark2.create({
-    name: "bold",
-    addOptions() {
-      return { HTMLAttributes: {} };
-    },
-    parseHTML() {
-      return [
-        { tag: "strong" },
-        {
-          tag: "b",
-          getAttrs: (node) => node.style.fontWeight !== "normal" && null
-        },
-        {
-          style: "font-weight=400",
-          clearMark: (mark) => mark.type.name === this.name
-        },
-        {
-          style: "font-weight",
-          getAttrs: (value) => /^(bold(er)?|[5-9]\d{2,})$/.test(value) && null
-        }
-      ];
-    },
-    renderHTML({ HTMLAttributes }) {
-      return /* @__PURE__ */ h("strong", {
-        ...mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
-        children: /* @__PURE__ */ h("slot", {})
-      });
-    },
-    markdownTokenName: "strong",
-    parseMarkdown: (token, helpers) => {
-      return helpers.applyMark("bold", helpers.parseInline(token.tokens || []));
-    },
-    markdownOptions: { htmlReopen: {
-      open: "<strong>",
-      close: "</strong>"
-    } },
-    renderMarkdown: (node, h2) => {
-      return `**${h2.renderChildren(node)}**`;
-    },
-    addCommands() {
-      return {
-        setBold: () => ({ commands }) => {
-          return commands.setMark(this.name);
-        },
-        toggleBold: () => ({ commands }) => {
-          return commands.toggleMark(this.name);
-        },
-        unsetBold: () => ({ commands }) => {
-          return commands.unsetMark(this.name);
-        }
-      };
-    },
-    addKeyboardShortcuts() {
-      return {
-        "Mod-b": () => this.editor.commands.toggleBold(),
-        "Mod-B": () => this.editor.commands.toggleBold()
-      };
-    },
-    addInputRules() {
-      return [markInputRule({
-        find: starInputRegex,
-        type: this.type
-      }), markInputRule({
-        find: underscoreInputRegex,
-        type: this.type
-      })];
-    },
-    addPasteRules() {
-      return [markPasteRule({
-        find: starPasteRegex,
-        type: this.type
-      }), markPasteRule({
-        find: underscorePasteRegex,
-        type: this.type
-      })];
-    }
-  });
-
-  // node_modules/@tiptap/extension-code/dist/index.js
-  var inputRegexMatch = (text) => {
-    const match = /`([^`]+)`(?!`)$/.exec(text);
-    if (!match) return null;
-    if (match.index > 0 && text[match.index - 1] === "`") return null;
-    return {
-      index: match.index,
-      text: match[0],
-      replaceWith: match[1]
-    };
-  };
-  var pasteRegexMatch = (text) => {
-    const regex = /`([^`]+)`(?!`)/g;
-    const matches2 = [];
-    let match;
-    while ((match = regex.exec(text)) !== null) {
-      if (match.index > 0 && text[match.index - 1] === "`") continue;
-      matches2.push({
-        index: match.index,
-        text: match[0],
-        replaceWith: match[1]
-      });
-    }
-    return matches2;
-  };
-  var Code = Mark2.create({
-    name: "code",
-    addOptions() {
-      return { HTMLAttributes: {} };
-    },
-    excludes: "_",
-    code: true,
-    exitable: true,
-    parseHTML() {
-      return [{ tag: "code" }];
-    },
-    renderHTML({ HTMLAttributes }) {
-      return [
-        "code",
-        mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
-        0
-      ];
-    },
-    markdownTokenName: "codespan",
-    parseMarkdown: (token, helpers) => {
-      return helpers.applyMark("code", [{
-        type: "text",
-        text: token.text || ""
-      }]);
-    },
-    renderMarkdown: (node, h2) => {
-      if (!node.content) return "";
-      return `\`${h2.renderChildren(node.content)}\``;
-    },
-    addCommands() {
-      return {
-        setCode: () => ({ commands }) => {
-          return commands.setMark(this.name);
-        },
-        toggleCode: () => ({ commands }) => {
-          return commands.toggleMark(this.name);
-        },
-        unsetCode: () => ({ commands }) => {
-          return commands.unsetMark(this.name);
-        }
-      };
-    },
-    addKeyboardShortcuts() {
-      return { "Mod-e": () => this.editor.commands.toggleCode() };
-    },
-    addInputRules() {
-      return [markInputRule({
-        find: inputRegexMatch,
-        type: this.type
-      })];
-    },
-    addPasteRules() {
-      return [markPasteRule({
-        find: pasteRegexMatch,
-        type: this.type
-      })];
-    }
-  });
-
-  // node_modules/@tiptap/extension-code-block/dist/index.js
-  var DEFAULT_TAB_SIZE = 4;
-  var backtickInputRegex = /^```([a-z]+)?[\s\n]$/;
-  var tildeInputRegex = /^~~~([a-z]+)?[\s\n]$/;
-  var CodeBlock = Node2.create({
-    name: "codeBlock",
+  // node_modules/@tiptap/extension-image/dist/index.js
+  var inputRegex = /(?:^|\s)(!\[(.+|:?)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\))$/;
+  var Image = Node2.create({
+    name: "image",
     addOptions() {
       return {
-        languageClassPrefix: "language-",
-        exitOnTripleEnter: true,
-        exitOnArrowDown: true,
-        exitOnArrowUp: true,
-        defaultLanguage: null,
-        enableTabIndentation: false,
-        tabSize: DEFAULT_TAB_SIZE,
-        HTMLAttributes: {}
-      };
-    },
-    content: "text*",
-    marks: "",
-    group: "block",
-    code: true,
-    defining: true,
-    addAttributes() {
-      return { language: {
-        default: this.options.defaultLanguage,
-        parseHTML: (element) => {
-          var _element$firstElement;
-          const { languageClassPrefix } = this.options;
-          if (!languageClassPrefix) return null;
-          const language = [...((_element$firstElement = element.firstElementChild) === null || _element$firstElement === void 0 ? void 0 : _element$firstElement.classList) || []].filter((className) => className.startsWith(languageClassPrefix)).map((className) => className.replace(languageClassPrefix, ""))[0];
-          if (!language) return null;
-          return language;
-        },
-        rendered: false
-      } };
-    },
-    parseHTML() {
-      return [{
-        tag: "pre",
-        preserveWhitespace: "full"
-      }];
-    },
-    renderHTML({ node, HTMLAttributes }) {
-      return [
-        "pre",
-        mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
-        [
-          "code",
-          { class: node.attrs.language ? this.options.languageClassPrefix + node.attrs.language : null },
-          0
-        ]
-      ];
-    },
-    markdownTokenName: "code",
-    parseMarkdown: (token, helpers) => {
-      var _token$raw, _token$raw2;
-      if (((_token$raw = token.raw) === null || _token$raw === void 0 ? void 0 : _token$raw.startsWith("```")) === false && ((_token$raw2 = token.raw) === null || _token$raw2 === void 0 ? void 0 : _token$raw2.startsWith("~~~")) === false && token.codeBlockStyle !== "indented") return [];
-      return helpers.createNode("codeBlock", { language: token.lang || null }, token.text ? [helpers.createTextNode(token.text)] : []);
-    },
-    renderMarkdown: (node, h2) => {
-      var _node$attrs;
-      let output = "";
-      const language = ((_node$attrs = node.attrs) === null || _node$attrs === void 0 ? void 0 : _node$attrs.language) || "";
-      if (!node.content) output = `\`\`\`${language}
-
-\`\`\``;
-      else output = [
-        `\`\`\`${language}`,
-        h2.renderChildren(node.content),
-        "```"
-      ].join("\n");
-      return output;
-    },
-    addCommands() {
-      return {
-        setCodeBlock: (attributes) => ({ commands }) => {
-          return commands.setNode(this.name, attributes);
-        },
-        toggleCodeBlock: (attributes) => ({ commands }) => {
-          return commands.toggleNode(this.name, "paragraph", attributes);
-        }
-      };
-    },
-    addKeyboardShortcuts() {
-      return {
-        "Mod-Alt-c": () => this.editor.commands.toggleCodeBlock(),
-        Backspace: () => {
-          const { empty: empty2, $anchor } = this.editor.state.selection;
-          const isAtStart = $anchor.pos === 1;
-          if (!empty2 || $anchor.parent.type.name !== this.name) return false;
-          if (isAtStart || !$anchor.parent.textContent.length) return this.editor.commands.clearNodes();
-          return false;
-        },
-        Tab: ({ editor }) => {
-          var _this$options$tabSize;
-          if (!this.options.enableTabIndentation) return false;
-          const tabSize = (_this$options$tabSize = this.options.tabSize) !== null && _this$options$tabSize !== void 0 ? _this$options$tabSize : DEFAULT_TAB_SIZE;
-          const { state } = editor;
-          const { selection } = state;
-          const { $from, empty: empty2 } = selection;
-          if ($from.parent.type !== this.type) return false;
-          const indent = " ".repeat(tabSize);
-          if (empty2) return editor.commands.insertContent(indent);
-          return editor.commands.command(({ tr: tr2 }) => {
-            const { from: from2, to } = selection;
-            const indentedText = state.doc.textBetween(from2, to, "\n", "\n").split("\n").map((line) => indent + line).join("\n");
-            tr2.replaceWith(from2, to, state.schema.text(indentedText));
-            return true;
-          });
-        },
-        "Shift-Tab": ({ editor }) => {
-          var _this$options$tabSize2;
-          if (!this.options.enableTabIndentation) return false;
-          const tabSize = (_this$options$tabSize2 = this.options.tabSize) !== null && _this$options$tabSize2 !== void 0 ? _this$options$tabSize2 : DEFAULT_TAB_SIZE;
-          const { state } = editor;
-          const { selection } = state;
-          const { $from, empty: empty2 } = selection;
-          if ($from.parent.type !== this.type) return false;
-          if (empty2) return editor.commands.command(({ tr: tr2 }) => {
-            var _currentLine$match;
-            const { pos } = $from;
-            const codeBlockStart = $from.start();
-            const codeBlockEnd = $from.end();
-            const lines = state.doc.textBetween(codeBlockStart, codeBlockEnd, "\n", "\n").split("\n");
-            let currentLineIndex = 0;
-            let charCount = 0;
-            const relativeCursorPos = pos - codeBlockStart;
-            for (let i = 0; i < lines.length; i += 1) {
-              if (charCount + lines[i].length >= relativeCursorPos) {
-                currentLineIndex = i;
-                break;
-              }
-              charCount += lines[i].length + 1;
-            }
-            const leadingSpaces = ((_currentLine$match = lines[currentLineIndex].match(/^ */)) === null || _currentLine$match === void 0 ? void 0 : _currentLine$match[0]) || "";
-            const spacesToRemove = Math.min(leadingSpaces.length, tabSize);
-            if (spacesToRemove === 0) return true;
-            let lineStartPos = codeBlockStart;
-            for (let i = 0; i < currentLineIndex; i += 1) lineStartPos += lines[i].length + 1;
-            tr2.delete(lineStartPos, lineStartPos + spacesToRemove);
-            if (pos - lineStartPos <= spacesToRemove) tr2.setSelection(TextSelection.create(tr2.doc, lineStartPos));
-            return true;
-          });
-          return editor.commands.command(({ tr: tr2 }) => {
-            const { from: from2, to } = selection;
-            const reverseIndentText = state.doc.textBetween(from2, to, "\n", "\n").split("\n").map((line) => {
-              var _line$match;
-              const leadingSpaces = ((_line$match = line.match(/^ */)) === null || _line$match === void 0 ? void 0 : _line$match[0]) || "";
-              const spacesToRemove = Math.min(leadingSpaces.length, tabSize);
-              return line.slice(spacesToRemove);
-            }).join("\n");
-            tr2.replaceWith(from2, to, state.schema.text(reverseIndentText));
-            return true;
-          });
-        },
-        Enter: ({ editor }) => {
-          if (!this.options.exitOnTripleEnter) return false;
-          const { state } = editor;
-          const { selection } = state;
-          const { $from, empty: empty2 } = selection;
-          if (!empty2 || $from.parent.type !== this.type) return false;
-          const isAtEnd = $from.parentOffset === $from.parent.nodeSize - 2;
-          const endsWithDoubleNewline = $from.parent.textContent.endsWith("\n\n");
-          if (!isAtEnd || !endsWithDoubleNewline) return false;
-          return editor.chain().command(({ tr: tr2 }) => {
-            tr2.delete($from.pos - 2, $from.pos);
-            return true;
-          }).exitCode().run();
-        },
-        ArrowUp: ({ editor }) => {
-          if (!this.options.exitOnArrowUp) return false;
-          const { state } = editor;
-          const { selection } = state;
-          const { $from, empty: empty2 } = selection;
-          if (!empty2 || $from.parent.type !== this.type) return false;
-          if ($from.parentOffset !== 0) return false;
-          const before = $from.before();
-          if (before > 0) return false;
-          return editor.commands.insertDefaultBlock({ pos: before });
-        },
-        ArrowDown: ({ editor }) => {
-          if (!this.options.exitOnArrowDown) return false;
-          const { state } = editor;
-          const { selection, doc: doc3 } = state;
-          const { $from, empty: empty2 } = selection;
-          if (!empty2 || $from.parent.type !== this.type) return false;
-          if (!($from.parentOffset === $from.parent.nodeSize - 2)) return false;
-          const after = $from.after();
-          if (after === void 0) return false;
-          if (doc3.nodeAt(after)) return editor.commands.command(({ tr: tr2 }) => {
-            tr2.setSelection(Selection.near(doc3.resolve(after)));
-            return true;
-          });
-          return editor.commands.exitCode();
-        }
-      };
-    },
-    addInputRules() {
-      return [textblockTypeInputRule({
-        find: backtickInputRegex,
-        type: this.type,
-        getAttributes: (match) => ({ language: match[1] })
-      }), textblockTypeInputRule({
-        find: tildeInputRegex,
-        type: this.type,
-        getAttributes: (match) => ({ language: match[1] })
-      })];
-    },
-    addProseMirrorPlugins() {
-      return [new Plugin({
-        key: new PluginKey("codeBlockVSCodeHandler"),
-        props: { handlePaste: (view, event) => {
-          if (!event.clipboardData) return false;
-          if (this.editor.isActive(this.type.name)) return false;
-          const text = event.clipboardData.getData("text/plain");
-          const vscode = event.clipboardData.getData("vscode-editor-data");
-          const vscodeData = vscode ? JSON.parse(vscode) : void 0;
-          const language = vscodeData === null || vscodeData === void 0 ? void 0 : vscodeData.mode;
-          if (!text || !language) return false;
-          const { tr: tr2, schema } = view.state;
-          const textNode = schema.text(text.replace(/\r\n?/g, "\n"));
-          tr2.replaceSelectionWith(this.type.create({ language }, textNode));
-          if (tr2.selection.$from.parent.type !== this.type) tr2.setSelection(TextSelection.near(tr2.doc.resolve(Math.max(0, tr2.selection.from - 2))));
-          tr2.setMeta("paste", true);
-          view.dispatch(tr2);
-          return true;
-        } }
-      })];
-    }
-  });
-
-  // node_modules/@tiptap/extension-document/dist/index.js
-  var Document = Node2.create({
-    name: "doc",
-    topNode: true,
-    content: "block+",
-    renderMarkdown: (node, h2) => {
-      if (!node.content) return "";
-      return h2.renderChildren(node.content, "\n\n");
-    }
-  });
-
-  // node_modules/@tiptap/extension-hard-break/dist/index.js
-  var HardBreak = Node2.create({
-    name: "hardBreak",
-    markdownTokenName: "br",
-    addOptions() {
-      return {
-        keepMarks: true,
-        HTMLAttributes: {}
-      };
-    },
-    inline: true,
-    group: "inline",
-    selectable: false,
-    linebreakReplacement: true,
-    parseHTML() {
-      return [{ tag: "br" }];
-    },
-    renderHTML({ HTMLAttributes }) {
-      return ["br", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)];
-    },
-    renderText() {
-      return "\n";
-    },
-    renderMarkdown: () => `  
-`,
-    parseMarkdown: () => {
-      return { type: "hardBreak" };
-    },
-    addCommands() {
-      return { setHardBreak: () => ({ commands, chain, state, editor }) => {
-        return commands.first([() => commands.exitCode(), () => commands.command(() => {
-          const { selection, storedMarks } = state;
-          if (selection.$from.parent.type.spec.isolating) return false;
-          const { keepMarks } = this.options;
-          const { splittableMarks } = editor.extensionManager;
-          const marks = storedMarks || selection.$to.parentOffset && selection.$from.marks();
-          return chain().insertContent({ type: this.name }).command(({ tr: tr2, dispatch }) => {
-            if (dispatch && marks && keepMarks) {
-              const filteredMarks = marks.filter((mark) => splittableMarks.includes(mark.type.name));
-              tr2.ensureMarks(filteredMarks);
-            }
-            return true;
-          }).scrollIntoView().run();
-        })]);
-      } };
-    },
-    addKeyboardShortcuts() {
-      return {
-        "Mod-Enter": () => this.editor.commands.setHardBreak(),
-        "Shift-Enter": () => this.editor.commands.setHardBreak()
-      };
-    }
-  });
-
-  // node_modules/@tiptap/extension-heading/dist/index.js
-  var Heading = Node2.create({
-    name: "heading",
-    addOptions() {
-      return {
-        levels: [
-          1,
-          2,
-          3,
-          4,
-          5,
-          6
-        ],
-        HTMLAttributes: {}
-      };
-    },
-    content: "inline*",
-    group: "block",
-    defining: true,
-    addAttributes() {
-      return { level: {
-        default: 1,
-        rendered: false
-      } };
-    },
-    parseHTML() {
-      return this.options.levels.map((level) => ({
-        tag: `h${level}`,
-        attrs: { level }
-      }));
-    },
-    renderHTML({ node, HTMLAttributes }) {
-      return [
-        `h${this.options.levels.includes(node.attrs.level) ? node.attrs.level : this.options.levels[0]}`,
-        mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
-        0
-      ];
-    },
-    parseMarkdown: (token, helpers) => {
-      return helpers.createNode("heading", { level: token.depth || 1 }, helpers.parseInline(token.tokens || []));
-    },
-    renderMarkdown: (node, h2) => {
-      var _node$attrs;
-      const level = ((_node$attrs = node.attrs) === null || _node$attrs === void 0 ? void 0 : _node$attrs.level) ? parseInt(node.attrs.level, 10) : 1;
-      const headingChars = "#".repeat(level);
-      if (!node.content) return "";
-      return `${headingChars} ${h2.renderChildren(node.content)}`;
-    },
-    addCommands() {
-      return {
-        setHeading: (attributes) => ({ commands }) => {
-          if (!this.options.levels.includes(attributes.level)) return false;
-          return commands.setNode(this.name, attributes);
-        },
-        toggleHeading: (attributes) => ({ commands }) => {
-          if (!this.options.levels.includes(attributes.level)) return false;
-          return commands.toggleNode(this.name, "paragraph", attributes);
-        }
-      };
-    },
-    addKeyboardShortcuts() {
-      return this.options.levels.reduce((items, level) => ({
-        ...items,
-        [`Mod-Alt-${level}`]: () => this.editor.commands.toggleHeading({ level })
-      }), {});
-    },
-    addInputRules() {
-      return this.options.levels.map((level) => {
-        return textblockTypeInputRule({
-          find: new RegExp(`^(#{${Math.min(...this.options.levels)},${level}})\\s$`),
-          type: this.type,
-          getAttributes: { level }
-        });
-      });
-    }
-  });
-
-  // node_modules/@tiptap/extension-horizontal-rule/dist/index.js
-  var HorizontalRule = Node2.create({
-    name: "horizontalRule",
-    addOptions() {
-      return {
+        inline: false,
+        allowBase64: false,
         HTMLAttributes: {},
-        nextNodeType: "paragraph"
+        resize: false
       };
     },
-    group: "block",
+    inline() {
+      return this.options.inline;
+    },
+    group() {
+      return this.options.inline ? "inline" : "block";
+    },
+    draggable: true,
+    addAttributes() {
+      return {
+        src: { default: null },
+        alt: { default: null },
+        title: { default: null },
+        width: { default: null },
+        height: { default: null }
+      };
+    },
     parseHTML() {
-      return [{ tag: "hr" }];
+      return [{ tag: this.options.allowBase64 ? "img[src]" : 'img[src]:not([src^="data:"])' }];
     },
     renderHTML({ HTMLAttributes }) {
-      return ["hr", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)];
+      return ["img", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)];
     },
-    markdownTokenName: "hr",
     parseMarkdown: (token, helpers) => {
-      return helpers.createNode("horizontalRule");
+      return helpers.createNode("image", {
+        src: token.href,
+        title: token.title,
+        alt: token.text
+      });
     },
-    renderMarkdown: () => {
-      return "---";
+    renderMarkdown: (node) => {
+      var _node$attrs$src, _node$attrs, _node$attrs$alt, _node$attrs2, _node$attrs$title, _node$attrs3;
+      const src = (_node$attrs$src = (_node$attrs = node.attrs) === null || _node$attrs === void 0 ? void 0 : _node$attrs.src) !== null && _node$attrs$src !== void 0 ? _node$attrs$src : "";
+      const alt = (_node$attrs$alt = (_node$attrs2 = node.attrs) === null || _node$attrs2 === void 0 ? void 0 : _node$attrs2.alt) !== null && _node$attrs$alt !== void 0 ? _node$attrs$alt : "";
+      const title = (_node$attrs$title = (_node$attrs3 = node.attrs) === null || _node$attrs3 === void 0 ? void 0 : _node$attrs3.title) !== null && _node$attrs$title !== void 0 ? _node$attrs$title : "";
+      return title ? `![${alt}](${src} "${title}")` : `![${alt}](${src})`;
+    },
+    addNodeView() {
+      if (!this.options.resize || !this.options.resize.enabled || typeof document === "undefined") return null;
+      const { directions, minWidth, minHeight, alwaysPreserveAspectRatio } = this.options.resize;
+      const resizeManagedAttributes = /* @__PURE__ */ new Set([
+        "src",
+        "width",
+        "height"
+      ]);
+      return ({ node, getPos, HTMLAttributes, editor }) => {
+        const el = document.createElement("img");
+        el.draggable = false;
+        const mergedAttributes = mergeAttributes(this.options.HTMLAttributes, HTMLAttributes);
+        Object.entries(mergedAttributes).forEach(([key, value]) => {
+          if (value != null) switch (key) {
+            case "src":
+            case "width":
+            case "height":
+              break;
+            default:
+              el.setAttribute(key, value);
+          }
+        });
+        if (mergedAttributes.src !== null) el.src = mergedAttributes.src;
+        let previousHTMLAttributes = { ...HTMLAttributes };
+        const syncImageSource = (src) => {
+          if (typeof src === "string" && src !== "") {
+            if (el.getAttribute("src") !== src) el.src = src;
+            return;
+          }
+          if (el.hasAttribute("src")) el.removeAttribute("src");
+          if (el.src !== "") el.src = "";
+        };
+        syncImageSource(HTMLAttributes.src);
+        const onUpdate = (updatedNode) => {
+          if (updatedNode.type !== node.type) return false;
+          const extensionAttributes = editor.extensionManager.attributes.filter((attribute) => attribute.type === updatedNode.type.name);
+          const newHTMLAttributes = getRenderedAttributes(updatedNode, extensionAttributes);
+          Object.keys(previousHTMLAttributes).forEach((key) => {
+            if (!resizeManagedAttributes.has(key) && !(key in newHTMLAttributes)) el.removeAttribute(key);
+          });
+          Object.entries(newHTMLAttributes).forEach(([key, value]) => {
+            if (resizeManagedAttributes.has(key)) return;
+            if (value != null) el.setAttribute(key, value);
+            else el.removeAttribute(key);
+          });
+          syncImageSource(newHTMLAttributes.src);
+          previousHTMLAttributes = newHTMLAttributes;
+          return true;
+        };
+        const nodeView = new ResizableNodeView({
+          element: el,
+          editor,
+          node,
+          getPos,
+          onResize: (width, height) => {
+            el.style.width = `${width}px`;
+            el.style.height = `${height}px`;
+          },
+          onCommit: (width, height) => {
+            const pos = getPos();
+            if (pos === void 0) return;
+            this.editor.chain().setNodeSelection(pos).updateAttributes(this.name, {
+              width,
+              height
+            }).run();
+          },
+          onUpdate,
+          options: {
+            directions,
+            min: {
+              width: minWidth,
+              height: minHeight
+            },
+            preserveAspectRatio: alwaysPreserveAspectRatio === true
+          }
+        });
+        const dom = nodeView.dom;
+        const showNodeView = () => {
+          dom.style.visibility = "";
+          dom.style.pointerEvents = "";
+        };
+        dom.style.visibility = "hidden";
+        dom.style.pointerEvents = "none";
+        if (el.complete && el.naturalWidth > 0) showNodeView();
+        else {
+          el.onload = showNodeView;
+          el.onerror = showNodeView;
+        }
+        return nodeView;
+      };
     },
     addCommands() {
-      return { setHorizontalRule: () => ({ chain, state }) => {
-        if (!canInsertNode(state, state.schema.nodes[this.name])) return false;
-        const { selection } = state;
-        const { $to: $originTo } = selection;
-        const currentChain = chain();
-        if (isNodeSelection(selection)) currentChain.insertContentAt($originTo.pos, { type: this.name });
-        else currentChain.insertContent({ type: this.name });
-        return currentChain.command(({ state: chainState, tr: tr2, dispatch }) => {
-          if (dispatch) {
-            const { $to } = tr2.selection;
-            const posAfter = $to.end();
-            if ($to.nodeAfter) {
-              if ($to.nodeAfter.isTextblock) tr2.setSelection(TextSelection.create(tr2.doc, $to.pos + 1));
-              else if ($to.nodeAfter.isBlock) tr2.setSelection(NodeSelection.create(tr2.doc, $to.pos));
-              else tr2.setSelection(TextSelection.create(tr2.doc, $to.pos));
-            } else {
-              const nodeType = chainState.schema.nodes[this.options.nextNodeType] || $to.parent.type.contentMatch.defaultType;
-              const node = nodeType === null || nodeType === void 0 ? void 0 : nodeType.create();
-              if (node) {
-                tr2.insert(posAfter, node);
-                tr2.setSelection(TextSelection.create(tr2.doc, posAfter + 1));
-              }
-            }
-            tr2.scrollIntoView();
-          }
-          return true;
-        }).run();
+      return { setImage: (options) => ({ commands }) => {
+        return commands.insertContent({
+          type: this.name,
+          attrs: options
+        });
       } };
     },
     addInputRules() {
       return [nodeInputRule({
-        find: /^(?:---|—-|___\s|\*\*\*\s)$/,
-        type: this.type
-      })];
-    }
-  });
-
-  // node_modules/@tiptap/extension-italic/dist/index.js
-  var starInputRegex2 = /(?:^|\s)(\*(?!\s+\*)((?:[^*]+))\*(?!\s+\*))$/;
-  var starPasteRegex2 = /(?:^|\s)(\*(?!\s+\*)((?:[^*]+))\*(?!\s+\*))/g;
-  var underscoreInputRegex2 = /(?:^|\s)(_(?!\s+_)((?:[^_]+))_(?!\s+_))$/;
-  var underscorePasteRegex2 = /(?:^|\s)(_(?!\s+_)((?:[^_]+))_(?!\s+_))/g;
-  var Italic = Mark2.create({
-    name: "italic",
-    addOptions() {
-      return { HTMLAttributes: {} };
-    },
-    parseHTML() {
-      return [
-        { tag: "em" },
-        {
-          tag: "i",
-          getAttrs: (node) => node.style.fontStyle !== "normal" && null
-        },
-        {
-          style: "font-style=normal",
-          clearMark: (mark) => mark.type.name === this.name
-        },
-        { style: "font-style=italic" }
-      ];
-    },
-    renderHTML({ HTMLAttributes }) {
-      return [
-        "em",
-        mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
-        0
-      ];
-    },
-    addCommands() {
-      return {
-        setItalic: () => ({ commands }) => {
-          return commands.setMark(this.name);
-        },
-        toggleItalic: () => ({ commands }) => {
-          return commands.toggleMark(this.name);
-        },
-        unsetItalic: () => ({ commands }) => {
-          return commands.unsetMark(this.name);
+        find: inputRegex,
+        type: this.type,
+        getAttributes: (match) => {
+          const [, , alt, src, title] = match;
+          return {
+            src,
+            alt,
+            title
+          };
         }
-      };
-    },
-    markdownTokenName: "em",
-    parseMarkdown: (token, helpers) => {
-      return helpers.applyMark("italic", helpers.parseInline(token.tokens || []));
-    },
-    markdownOptions: { htmlReopen: {
-      open: "<em>",
-      close: "</em>"
-    } },
-    renderMarkdown: (node, h2) => {
-      return `*${h2.renderChildren(node)}*`;
-    },
-    addKeyboardShortcuts() {
-      return {
-        "Mod-i": () => this.editor.commands.toggleItalic(),
-        "Mod-I": () => this.editor.commands.toggleItalic()
-      };
-    },
-    addInputRules() {
-      return [markInputRule({
-        find: starInputRegex2,
-        type: this.type
-      }), markInputRule({
-        find: underscoreInputRegex2,
-        type: this.type
-      })];
-    },
-    addPasteRules() {
-      return [markPasteRule({
-        find: starPasteRegex2,
-        type: this.type
-      }), markPasteRule({
-        find: underscorePasteRegex2,
-        type: this.type
       })];
     }
   });
@@ -19430,6 +19218,899 @@ ${prefix}
     }
   });
 
+  // node_modules/@tiptap/extension-underline/dist/index.js
+  var Underline = Mark2.create({
+    name: "underline",
+    addOptions() {
+      return { HTMLAttributes: {} };
+    },
+    parseHTML() {
+      return [{ tag: "u" }, {
+        style: "text-decoration",
+        consuming: false,
+        getAttrs: (style2) => style2.includes("underline") ? {} : false
+      }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return [
+        "u",
+        mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
+        0
+      ];
+    },
+    parseMarkdown(token, helpers) {
+      return helpers.applyMark(this.name || "underline", helpers.parseInline(token.tokens || []));
+    },
+    renderMarkdown(node, helpers) {
+      return `++${helpers.renderChildren(node)}++`;
+    },
+    markdownTokenizer: {
+      name: "underline",
+      level: "inline",
+      start(src) {
+        return src.indexOf("++");
+      },
+      tokenize(src, _tokens, lexer) {
+        const match = /^(\+\+)([\s\S]+?)(\+\+)/.exec(src);
+        if (!match) return;
+        const innerContent = match[2].trim();
+        return {
+          type: "underline",
+          raw: match[0],
+          text: innerContent,
+          tokens: lexer.inlineTokens(innerContent)
+        };
+      }
+    },
+    addCommands() {
+      return {
+        setUnderline: () => ({ commands }) => {
+          return commands.setMark(this.name);
+        },
+        toggleUnderline: () => ({ commands }) => {
+          return commands.toggleMark(this.name);
+        },
+        unsetUnderline: () => ({ commands }) => {
+          return commands.unsetMark(this.name);
+        }
+      };
+    },
+    addKeyboardShortcuts() {
+      return {
+        "Mod-u": () => this.editor.commands.toggleUnderline(),
+        "Mod-U": () => this.editor.commands.toggleUnderline()
+      };
+    }
+  });
+
+  // node_modules/@tiptap/core/dist/jsx-runtime/jsx-runtime.js
+  var jsxElements = /* @__PURE__ */ new WeakSet();
+  var jsxFragments = /* @__PURE__ */ new WeakSet();
+  function createJSXElement(spec) {
+    const element = spec;
+    jsxElements.add(element);
+    return element;
+  }
+  function isJSXElement(value) {
+    return Array.isArray(value) && jsxElements.has(value);
+  }
+  function flattenFragmentChildren(children) {
+    return children.flatMap((child) => {
+      if (child == null) return [];
+      if (Array.isArray(child) && jsxFragments.has(child) && !isJSXElement(child)) return flattenFragmentChildren(child);
+      return [child];
+    });
+  }
+  function render(tag, attributes) {
+    if (tag === "slot") return 0;
+    if (tag instanceof Function) {
+      const result = tag(attributes);
+      if (Array.isArray(result) && !isJSXElement(result) && !jsxFragments.has(result)) return createJSXElement(result);
+      return result;
+    }
+    const { children, ...rest } = attributes !== null && attributes !== void 0 ? attributes : {};
+    if (tag === "svg") throw new Error("SVG elements are not supported in the JSX syntax, use the array syntax instead");
+    if (Array.isArray(children)) {
+      if (isJSXElement(children)) return createJSXElement([
+        tag,
+        rest,
+        children
+      ]);
+      if (children.length === 0) return createJSXElement([tag, rest]);
+      const flattenedChildren = flattenFragmentChildren(children);
+      if (flattenedChildren.length === 0) return createJSXElement([tag, rest]);
+      return createJSXElement([
+        tag,
+        rest,
+        ...flattenedChildren
+      ]);
+    }
+    if (children !== void 0 && children !== null) return createJSXElement([
+      tag,
+      rest,
+      children
+    ]);
+    return createJSXElement([tag, rest]);
+  }
+  var h = (tag, attributes) => render(tag, attributes);
+
+  // node_modules/@tiptap/extension-blockquote/dist/index.js
+  var handleBackspace = (editor, type) => {
+    var _previous$lastChild;
+    const { state } = editor;
+    const { selection } = state;
+    if (!selection.empty) return false;
+    const { $from } = selection;
+    if ($from.parentOffset !== 0) return false;
+    const parentDepth = $from.depth - 1;
+    if (parentDepth < 0) return false;
+    const parent = $from.node(parentDepth);
+    const index = $from.index(parentDepth);
+    if (index === 0) return false;
+    if (parent.type === type) return editor.commands.lift(type.name);
+    const previous = parent.child(index - 1);
+    if (previous.type !== type || !((_previous$lastChild = previous.lastChild) === null || _previous$lastChild === void 0 ? void 0 : _previous$lastChild.isTextblock)) return false;
+    const targetPos = $from.before() - 1 - 1;
+    return editor.commands.command(({ tr: tr2, dispatch }) => {
+      if (!dispatch) return true;
+      const content = $from.parent.content;
+      const slice2 = new Slice(content, 0, 0);
+      tr2.replace(targetPos, $from.after(), slice2);
+      tr2.setSelection(TextSelection.create(tr2.doc, targetPos + content.size));
+      tr2.scrollIntoView();
+      dispatch(tr2);
+      return true;
+    });
+  };
+  var inputRegex2 = /^\s*>\s$/;
+  var Blockquote = Node2.create({
+    name: "blockquote",
+    addOptions() {
+      return { HTMLAttributes: {} };
+    },
+    content: "block+",
+    group: "block",
+    defining: true,
+    parseHTML() {
+      return [{ tag: "blockquote" }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return /* @__PURE__ */ h("blockquote", {
+        ...mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
+        children: /* @__PURE__ */ h("slot", {})
+      });
+    },
+    parseMarkdown: (token, helpers) => {
+      var _helpers$parseBlockCh;
+      const parseBlockChildren = (_helpers$parseBlockCh = helpers.parseBlockChildren) !== null && _helpers$parseBlockCh !== void 0 ? _helpers$parseBlockCh : helpers.parseChildren;
+      return helpers.createNode("blockquote", void 0, parseBlockChildren(token.tokens || []));
+    },
+    renderMarkdown: (node, h2) => {
+      if (!node.content) return "";
+      const prefix = ">";
+      const result = [];
+      node.content.forEach((child, index) => {
+        var _h$renderChild, _h$renderChild2;
+        const linesWithPrefix = ((_h$renderChild = (_h$renderChild2 = h2.renderChild) === null || _h$renderChild2 === void 0 ? void 0 : _h$renderChild2.call(h2, child, index)) !== null && _h$renderChild !== void 0 ? _h$renderChild : h2.renderChildren([child])).split("\n").map((line) => {
+          if (line.trim() === "") return prefix;
+          return `${prefix} ${line}`;
+        });
+        result.push(linesWithPrefix.join("\n"));
+      });
+      return result.join(`
+${prefix}
+`);
+    },
+    addCommands() {
+      return {
+        setBlockquote: () => ({ commands }) => {
+          return commands.wrapIn(this.name);
+        },
+        toggleBlockquote: () => ({ commands }) => {
+          return commands.toggleWrap(this.name);
+        },
+        unsetBlockquote: () => ({ commands }) => {
+          return commands.lift(this.name);
+        }
+      };
+    },
+    addKeyboardShortcuts() {
+      return {
+        "Mod-Shift-b": () => this.editor.commands.toggleBlockquote(),
+        Backspace: () => handleBackspace(this.editor, this.type)
+      };
+    },
+    addInputRules() {
+      return [wrappingInputRule({
+        find: inputRegex2,
+        type: this.type
+      })];
+    }
+  });
+
+  // node_modules/@tiptap/extension-bold/dist/index.js
+  var starInputRegex = /(?:^|\s)(\*\*(?!\s+\*\*)((?:[^*]+))\*\*(?!\s+\*\*))$/;
+  var starPasteRegex = /(?:^|\s)(\*\*(?!\s+\*\*)((?:[^*]+))\*\*(?!\s+\*\*))/g;
+  var underscoreInputRegex = /(?:^|\s)(__(?!\s+__)((?:[^_]+))__(?!\s+__))$/;
+  var underscorePasteRegex = /(?:^|\s)(__(?!\s+__)((?:[^_]+))__(?!\s+__))/g;
+  var Bold = Mark2.create({
+    name: "bold",
+    addOptions() {
+      return { HTMLAttributes: {} };
+    },
+    parseHTML() {
+      return [
+        { tag: "strong" },
+        {
+          tag: "b",
+          getAttrs: (node) => node.style.fontWeight !== "normal" && null
+        },
+        {
+          style: "font-weight=400",
+          clearMark: (mark) => mark.type.name === this.name
+        },
+        {
+          style: "font-weight",
+          getAttrs: (value) => /^(bold(er)?|[5-9]\d{2,})$/.test(value) && null
+        }
+      ];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return /* @__PURE__ */ h("strong", {
+        ...mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
+        children: /* @__PURE__ */ h("slot", {})
+      });
+    },
+    markdownTokenName: "strong",
+    parseMarkdown: (token, helpers) => {
+      return helpers.applyMark("bold", helpers.parseInline(token.tokens || []));
+    },
+    markdownOptions: { htmlReopen: {
+      open: "<strong>",
+      close: "</strong>"
+    } },
+    renderMarkdown: (node, h2) => {
+      return `**${h2.renderChildren(node)}**`;
+    },
+    addCommands() {
+      return {
+        setBold: () => ({ commands }) => {
+          return commands.setMark(this.name);
+        },
+        toggleBold: () => ({ commands }) => {
+          return commands.toggleMark(this.name);
+        },
+        unsetBold: () => ({ commands }) => {
+          return commands.unsetMark(this.name);
+        }
+      };
+    },
+    addKeyboardShortcuts() {
+      return {
+        "Mod-b": () => this.editor.commands.toggleBold(),
+        "Mod-B": () => this.editor.commands.toggleBold()
+      };
+    },
+    addInputRules() {
+      return [markInputRule({
+        find: starInputRegex,
+        type: this.type
+      }), markInputRule({
+        find: underscoreInputRegex,
+        type: this.type
+      })];
+    },
+    addPasteRules() {
+      return [markPasteRule({
+        find: starPasteRegex,
+        type: this.type
+      }), markPasteRule({
+        find: underscorePasteRegex,
+        type: this.type
+      })];
+    }
+  });
+
+  // node_modules/@tiptap/extension-code/dist/index.js
+  var inputRegexMatch = (text) => {
+    const match = /`([^`]+)`(?!`)$/.exec(text);
+    if (!match) return null;
+    if (match.index > 0 && text[match.index - 1] === "`") return null;
+    return {
+      index: match.index,
+      text: match[0],
+      replaceWith: match[1]
+    };
+  };
+  var pasteRegexMatch = (text) => {
+    const regex = /`([^`]+)`(?!`)/g;
+    const matches2 = [];
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > 0 && text[match.index - 1] === "`") continue;
+      matches2.push({
+        index: match.index,
+        text: match[0],
+        replaceWith: match[1]
+      });
+    }
+    return matches2;
+  };
+  var Code = Mark2.create({
+    name: "code",
+    addOptions() {
+      return { HTMLAttributes: {} };
+    },
+    excludes: "_",
+    code: true,
+    exitable: true,
+    parseHTML() {
+      return [{ tag: "code" }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return [
+        "code",
+        mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
+        0
+      ];
+    },
+    markdownTokenName: "codespan",
+    parseMarkdown: (token, helpers) => {
+      return helpers.applyMark("code", [{
+        type: "text",
+        text: token.text || ""
+      }]);
+    },
+    renderMarkdown: (node, h2) => {
+      if (!node.content) return "";
+      return `\`${h2.renderChildren(node.content)}\``;
+    },
+    addCommands() {
+      return {
+        setCode: () => ({ commands }) => {
+          return commands.setMark(this.name);
+        },
+        toggleCode: () => ({ commands }) => {
+          return commands.toggleMark(this.name);
+        },
+        unsetCode: () => ({ commands }) => {
+          return commands.unsetMark(this.name);
+        }
+      };
+    },
+    addKeyboardShortcuts() {
+      return { "Mod-e": () => this.editor.commands.toggleCode() };
+    },
+    addInputRules() {
+      return [markInputRule({
+        find: inputRegexMatch,
+        type: this.type
+      })];
+    },
+    addPasteRules() {
+      return [markPasteRule({
+        find: pasteRegexMatch,
+        type: this.type
+      })];
+    }
+  });
+
+  // node_modules/@tiptap/extension-code-block/dist/index.js
+  var DEFAULT_TAB_SIZE = 4;
+  var backtickInputRegex = /^```([a-z]+)?[\s\n]$/;
+  var tildeInputRegex = /^~~~([a-z]+)?[\s\n]$/;
+  var CodeBlock = Node2.create({
+    name: "codeBlock",
+    addOptions() {
+      return {
+        languageClassPrefix: "language-",
+        exitOnTripleEnter: true,
+        exitOnArrowDown: true,
+        exitOnArrowUp: true,
+        defaultLanguage: null,
+        enableTabIndentation: false,
+        tabSize: DEFAULT_TAB_SIZE,
+        HTMLAttributes: {}
+      };
+    },
+    content: "text*",
+    marks: "",
+    group: "block",
+    code: true,
+    defining: true,
+    addAttributes() {
+      return { language: {
+        default: this.options.defaultLanguage,
+        parseHTML: (element) => {
+          var _element$firstElement;
+          const { languageClassPrefix } = this.options;
+          if (!languageClassPrefix) return null;
+          const language = [...((_element$firstElement = element.firstElementChild) === null || _element$firstElement === void 0 ? void 0 : _element$firstElement.classList) || []].filter((className) => className.startsWith(languageClassPrefix)).map((className) => className.replace(languageClassPrefix, ""))[0];
+          if (!language) return null;
+          return language;
+        },
+        rendered: false
+      } };
+    },
+    parseHTML() {
+      return [{
+        tag: "pre",
+        preserveWhitespace: "full"
+      }];
+    },
+    renderHTML({ node, HTMLAttributes }) {
+      return [
+        "pre",
+        mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
+        [
+          "code",
+          { class: node.attrs.language ? this.options.languageClassPrefix + node.attrs.language : null },
+          0
+        ]
+      ];
+    },
+    markdownTokenName: "code",
+    parseMarkdown: (token, helpers) => {
+      var _token$raw, _token$raw2;
+      if (((_token$raw = token.raw) === null || _token$raw === void 0 ? void 0 : _token$raw.startsWith("```")) === false && ((_token$raw2 = token.raw) === null || _token$raw2 === void 0 ? void 0 : _token$raw2.startsWith("~~~")) === false && token.codeBlockStyle !== "indented") return [];
+      return helpers.createNode("codeBlock", { language: token.lang || null }, token.text ? [helpers.createTextNode(token.text)] : []);
+    },
+    renderMarkdown: (node, h2) => {
+      var _node$attrs;
+      let output = "";
+      const language = ((_node$attrs = node.attrs) === null || _node$attrs === void 0 ? void 0 : _node$attrs.language) || "";
+      if (!node.content) output = `\`\`\`${language}
+
+\`\`\``;
+      else output = [
+        `\`\`\`${language}`,
+        h2.renderChildren(node.content),
+        "```"
+      ].join("\n");
+      return output;
+    },
+    addCommands() {
+      return {
+        setCodeBlock: (attributes) => ({ commands }) => {
+          return commands.setNode(this.name, attributes);
+        },
+        toggleCodeBlock: (attributes) => ({ commands }) => {
+          return commands.toggleNode(this.name, "paragraph", attributes);
+        }
+      };
+    },
+    addKeyboardShortcuts() {
+      return {
+        "Mod-Alt-c": () => this.editor.commands.toggleCodeBlock(),
+        Backspace: () => {
+          const { empty: empty2, $anchor } = this.editor.state.selection;
+          const isAtStart = $anchor.pos === 1;
+          if (!empty2 || $anchor.parent.type.name !== this.name) return false;
+          if (isAtStart || !$anchor.parent.textContent.length) return this.editor.commands.clearNodes();
+          return false;
+        },
+        Tab: ({ editor }) => {
+          var _this$options$tabSize;
+          if (!this.options.enableTabIndentation) return false;
+          const tabSize = (_this$options$tabSize = this.options.tabSize) !== null && _this$options$tabSize !== void 0 ? _this$options$tabSize : DEFAULT_TAB_SIZE;
+          const { state } = editor;
+          const { selection } = state;
+          const { $from, empty: empty2 } = selection;
+          if ($from.parent.type !== this.type) return false;
+          const indent = " ".repeat(tabSize);
+          if (empty2) return editor.commands.insertContent(indent);
+          return editor.commands.command(({ tr: tr2 }) => {
+            const { from: from2, to } = selection;
+            const indentedText = state.doc.textBetween(from2, to, "\n", "\n").split("\n").map((line) => indent + line).join("\n");
+            tr2.replaceWith(from2, to, state.schema.text(indentedText));
+            return true;
+          });
+        },
+        "Shift-Tab": ({ editor }) => {
+          var _this$options$tabSize2;
+          if (!this.options.enableTabIndentation) return false;
+          const tabSize = (_this$options$tabSize2 = this.options.tabSize) !== null && _this$options$tabSize2 !== void 0 ? _this$options$tabSize2 : DEFAULT_TAB_SIZE;
+          const { state } = editor;
+          const { selection } = state;
+          const { $from, empty: empty2 } = selection;
+          if ($from.parent.type !== this.type) return false;
+          if (empty2) return editor.commands.command(({ tr: tr2 }) => {
+            var _currentLine$match;
+            const { pos } = $from;
+            const codeBlockStart = $from.start();
+            const codeBlockEnd = $from.end();
+            const lines = state.doc.textBetween(codeBlockStart, codeBlockEnd, "\n", "\n").split("\n");
+            let currentLineIndex = 0;
+            let charCount = 0;
+            const relativeCursorPos = pos - codeBlockStart;
+            for (let i = 0; i < lines.length; i += 1) {
+              if (charCount + lines[i].length >= relativeCursorPos) {
+                currentLineIndex = i;
+                break;
+              }
+              charCount += lines[i].length + 1;
+            }
+            const leadingSpaces = ((_currentLine$match = lines[currentLineIndex].match(/^ */)) === null || _currentLine$match === void 0 ? void 0 : _currentLine$match[0]) || "";
+            const spacesToRemove = Math.min(leadingSpaces.length, tabSize);
+            if (spacesToRemove === 0) return true;
+            let lineStartPos = codeBlockStart;
+            for (let i = 0; i < currentLineIndex; i += 1) lineStartPos += lines[i].length + 1;
+            tr2.delete(lineStartPos, lineStartPos + spacesToRemove);
+            if (pos - lineStartPos <= spacesToRemove) tr2.setSelection(TextSelection.create(tr2.doc, lineStartPos));
+            return true;
+          });
+          return editor.commands.command(({ tr: tr2 }) => {
+            const { from: from2, to } = selection;
+            const reverseIndentText = state.doc.textBetween(from2, to, "\n", "\n").split("\n").map((line) => {
+              var _line$match;
+              const leadingSpaces = ((_line$match = line.match(/^ */)) === null || _line$match === void 0 ? void 0 : _line$match[0]) || "";
+              const spacesToRemove = Math.min(leadingSpaces.length, tabSize);
+              return line.slice(spacesToRemove);
+            }).join("\n");
+            tr2.replaceWith(from2, to, state.schema.text(reverseIndentText));
+            return true;
+          });
+        },
+        Enter: ({ editor }) => {
+          if (!this.options.exitOnTripleEnter) return false;
+          const { state } = editor;
+          const { selection } = state;
+          const { $from, empty: empty2 } = selection;
+          if (!empty2 || $from.parent.type !== this.type) return false;
+          const isAtEnd = $from.parentOffset === $from.parent.nodeSize - 2;
+          const endsWithDoubleNewline = $from.parent.textContent.endsWith("\n\n");
+          if (!isAtEnd || !endsWithDoubleNewline) return false;
+          return editor.chain().command(({ tr: tr2 }) => {
+            tr2.delete($from.pos - 2, $from.pos);
+            return true;
+          }).exitCode().run();
+        },
+        ArrowUp: ({ editor }) => {
+          if (!this.options.exitOnArrowUp) return false;
+          const { state } = editor;
+          const { selection } = state;
+          const { $from, empty: empty2 } = selection;
+          if (!empty2 || $from.parent.type !== this.type) return false;
+          if ($from.parentOffset !== 0) return false;
+          const before = $from.before();
+          if (before > 0) return false;
+          return editor.commands.insertDefaultBlock({ pos: before });
+        },
+        ArrowDown: ({ editor }) => {
+          if (!this.options.exitOnArrowDown) return false;
+          const { state } = editor;
+          const { selection, doc: doc3 } = state;
+          const { $from, empty: empty2 } = selection;
+          if (!empty2 || $from.parent.type !== this.type) return false;
+          if (!($from.parentOffset === $from.parent.nodeSize - 2)) return false;
+          const after = $from.after();
+          if (after === void 0) return false;
+          if (doc3.nodeAt(after)) return editor.commands.command(({ tr: tr2 }) => {
+            tr2.setSelection(Selection.near(doc3.resolve(after)));
+            return true;
+          });
+          return editor.commands.exitCode();
+        }
+      };
+    },
+    addInputRules() {
+      return [textblockTypeInputRule({
+        find: backtickInputRegex,
+        type: this.type,
+        getAttributes: (match) => ({ language: match[1] })
+      }), textblockTypeInputRule({
+        find: tildeInputRegex,
+        type: this.type,
+        getAttributes: (match) => ({ language: match[1] })
+      })];
+    },
+    addProseMirrorPlugins() {
+      return [new Plugin({
+        key: new PluginKey("codeBlockVSCodeHandler"),
+        props: { handlePaste: (view, event) => {
+          if (!event.clipboardData) return false;
+          if (this.editor.isActive(this.type.name)) return false;
+          const text = event.clipboardData.getData("text/plain");
+          const vscode = event.clipboardData.getData("vscode-editor-data");
+          const vscodeData = vscode ? JSON.parse(vscode) : void 0;
+          const language = vscodeData === null || vscodeData === void 0 ? void 0 : vscodeData.mode;
+          if (!text || !language) return false;
+          const { tr: tr2, schema } = view.state;
+          const textNode = schema.text(text.replace(/\r\n?/g, "\n"));
+          tr2.replaceSelectionWith(this.type.create({ language }, textNode));
+          if (tr2.selection.$from.parent.type !== this.type) tr2.setSelection(TextSelection.near(tr2.doc.resolve(Math.max(0, tr2.selection.from - 2))));
+          tr2.setMeta("paste", true);
+          view.dispatch(tr2);
+          return true;
+        } }
+      })];
+    }
+  });
+
+  // node_modules/@tiptap/extension-document/dist/index.js
+  var Document = Node2.create({
+    name: "doc",
+    topNode: true,
+    content: "block+",
+    renderMarkdown: (node, h2) => {
+      if (!node.content) return "";
+      return h2.renderChildren(node.content, "\n\n");
+    }
+  });
+
+  // node_modules/@tiptap/extension-hard-break/dist/index.js
+  var HardBreak = Node2.create({
+    name: "hardBreak",
+    markdownTokenName: "br",
+    addOptions() {
+      return {
+        keepMarks: true,
+        HTMLAttributes: {}
+      };
+    },
+    inline: true,
+    group: "inline",
+    selectable: false,
+    linebreakReplacement: true,
+    parseHTML() {
+      return [{ tag: "br" }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["br", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)];
+    },
+    renderText() {
+      return "\n";
+    },
+    renderMarkdown: () => `  
+`,
+    parseMarkdown: () => {
+      return { type: "hardBreak" };
+    },
+    addCommands() {
+      return { setHardBreak: () => ({ commands, chain, state, editor }) => {
+        return commands.first([() => commands.exitCode(), () => commands.command(() => {
+          const { selection, storedMarks } = state;
+          if (selection.$from.parent.type.spec.isolating) return false;
+          const { keepMarks } = this.options;
+          const { splittableMarks } = editor.extensionManager;
+          const marks = storedMarks || selection.$to.parentOffset && selection.$from.marks();
+          return chain().insertContent({ type: this.name }).command(({ tr: tr2, dispatch }) => {
+            if (dispatch && marks && keepMarks) {
+              const filteredMarks = marks.filter((mark) => splittableMarks.includes(mark.type.name));
+              tr2.ensureMarks(filteredMarks);
+            }
+            return true;
+          }).scrollIntoView().run();
+        })]);
+      } };
+    },
+    addKeyboardShortcuts() {
+      return {
+        "Mod-Enter": () => this.editor.commands.setHardBreak(),
+        "Shift-Enter": () => this.editor.commands.setHardBreak()
+      };
+    }
+  });
+
+  // node_modules/@tiptap/extension-heading/dist/index.js
+  var Heading = Node2.create({
+    name: "heading",
+    addOptions() {
+      return {
+        levels: [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        HTMLAttributes: {}
+      };
+    },
+    content: "inline*",
+    group: "block",
+    defining: true,
+    addAttributes() {
+      return { level: {
+        default: 1,
+        rendered: false
+      } };
+    },
+    parseHTML() {
+      return this.options.levels.map((level) => ({
+        tag: `h${level}`,
+        attrs: { level }
+      }));
+    },
+    renderHTML({ node, HTMLAttributes }) {
+      return [
+        `h${this.options.levels.includes(node.attrs.level) ? node.attrs.level : this.options.levels[0]}`,
+        mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
+        0
+      ];
+    },
+    parseMarkdown: (token, helpers) => {
+      return helpers.createNode("heading", { level: token.depth || 1 }, helpers.parseInline(token.tokens || []));
+    },
+    renderMarkdown: (node, h2) => {
+      var _node$attrs;
+      const level = ((_node$attrs = node.attrs) === null || _node$attrs === void 0 ? void 0 : _node$attrs.level) ? parseInt(node.attrs.level, 10) : 1;
+      const headingChars = "#".repeat(level);
+      if (!node.content) return "";
+      return `${headingChars} ${h2.renderChildren(node.content)}`;
+    },
+    addCommands() {
+      return {
+        setHeading: (attributes) => ({ commands }) => {
+          if (!this.options.levels.includes(attributes.level)) return false;
+          return commands.setNode(this.name, attributes);
+        },
+        toggleHeading: (attributes) => ({ commands }) => {
+          if (!this.options.levels.includes(attributes.level)) return false;
+          return commands.toggleNode(this.name, "paragraph", attributes);
+        }
+      };
+    },
+    addKeyboardShortcuts() {
+      return this.options.levels.reduce((items, level) => ({
+        ...items,
+        [`Mod-Alt-${level}`]: () => this.editor.commands.toggleHeading({ level })
+      }), {});
+    },
+    addInputRules() {
+      return this.options.levels.map((level) => {
+        return textblockTypeInputRule({
+          find: new RegExp(`^(#{${Math.min(...this.options.levels)},${level}})\\s$`),
+          type: this.type,
+          getAttributes: { level }
+        });
+      });
+    }
+  });
+
+  // node_modules/@tiptap/extension-horizontal-rule/dist/index.js
+  var HorizontalRule = Node2.create({
+    name: "horizontalRule",
+    addOptions() {
+      return {
+        HTMLAttributes: {},
+        nextNodeType: "paragraph"
+      };
+    },
+    group: "block",
+    parseHTML() {
+      return [{ tag: "hr" }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["hr", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)];
+    },
+    markdownTokenName: "hr",
+    parseMarkdown: (token, helpers) => {
+      return helpers.createNode("horizontalRule");
+    },
+    renderMarkdown: () => {
+      return "---";
+    },
+    addCommands() {
+      return { setHorizontalRule: () => ({ chain, state }) => {
+        if (!canInsertNode(state, state.schema.nodes[this.name])) return false;
+        const { selection } = state;
+        const { $to: $originTo } = selection;
+        const currentChain = chain();
+        if (isNodeSelection(selection)) currentChain.insertContentAt($originTo.pos, { type: this.name });
+        else currentChain.insertContent({ type: this.name });
+        return currentChain.command(({ state: chainState, tr: tr2, dispatch }) => {
+          if (dispatch) {
+            const { $to } = tr2.selection;
+            const posAfter = $to.end();
+            if ($to.nodeAfter) {
+              if ($to.nodeAfter.isTextblock) tr2.setSelection(TextSelection.create(tr2.doc, $to.pos + 1));
+              else if ($to.nodeAfter.isBlock) tr2.setSelection(NodeSelection.create(tr2.doc, $to.pos));
+              else tr2.setSelection(TextSelection.create(tr2.doc, $to.pos));
+            } else {
+              const nodeType = chainState.schema.nodes[this.options.nextNodeType] || $to.parent.type.contentMatch.defaultType;
+              const node = nodeType === null || nodeType === void 0 ? void 0 : nodeType.create();
+              if (node) {
+                tr2.insert(posAfter, node);
+                tr2.setSelection(TextSelection.create(tr2.doc, posAfter + 1));
+              }
+            }
+            tr2.scrollIntoView();
+          }
+          return true;
+        }).run();
+      } };
+    },
+    addInputRules() {
+      return [nodeInputRule({
+        find: /^(?:---|—-|___\s|\*\*\*\s)$/,
+        type: this.type
+      })];
+    }
+  });
+
+  // node_modules/@tiptap/extension-italic/dist/index.js
+  var starInputRegex2 = /(?:^|\s)(\*(?!\s+\*)((?:[^*]+))\*(?!\s+\*))$/;
+  var starPasteRegex2 = /(?:^|\s)(\*(?!\s+\*)((?:[^*]+))\*(?!\s+\*))/g;
+  var underscoreInputRegex2 = /(?:^|\s)(_(?!\s+_)((?:[^_]+))_(?!\s+_))$/;
+  var underscorePasteRegex2 = /(?:^|\s)(_(?!\s+_)((?:[^_]+))_(?!\s+_))/g;
+  var Italic = Mark2.create({
+    name: "italic",
+    addOptions() {
+      return { HTMLAttributes: {} };
+    },
+    parseHTML() {
+      return [
+        { tag: "em" },
+        {
+          tag: "i",
+          getAttrs: (node) => node.style.fontStyle !== "normal" && null
+        },
+        {
+          style: "font-style=normal",
+          clearMark: (mark) => mark.type.name === this.name
+        },
+        { style: "font-style=italic" }
+      ];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return [
+        "em",
+        mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
+        0
+      ];
+    },
+    addCommands() {
+      return {
+        setItalic: () => ({ commands }) => {
+          return commands.setMark(this.name);
+        },
+        toggleItalic: () => ({ commands }) => {
+          return commands.toggleMark(this.name);
+        },
+        unsetItalic: () => ({ commands }) => {
+          return commands.unsetMark(this.name);
+        }
+      };
+    },
+    markdownTokenName: "em",
+    parseMarkdown: (token, helpers) => {
+      return helpers.applyMark("italic", helpers.parseInline(token.tokens || []));
+    },
+    markdownOptions: { htmlReopen: {
+      open: "<em>",
+      close: "</em>"
+    } },
+    renderMarkdown: (node, h2) => {
+      return `*${h2.renderChildren(node)}*`;
+    },
+    addKeyboardShortcuts() {
+      return {
+        "Mod-i": () => this.editor.commands.toggleItalic(),
+        "Mod-I": () => this.editor.commands.toggleItalic()
+      };
+    },
+    addInputRules() {
+      return [markInputRule({
+        find: starInputRegex2,
+        type: this.type
+      }), markInputRule({
+        find: underscoreInputRegex2,
+        type: this.type
+      })];
+    },
+    addPasteRules() {
+      return [markPasteRule({
+        find: starPasteRegex2,
+        type: this.type
+      }), markPasteRule({
+        find: underscorePasteRegex2,
+        type: this.type
+      })];
+    }
+  });
+
   // node_modules/@tiptap/extension-list/dist/index.js
   var ListItemName$1 = "listItem";
   var TextStyleName$1 = "textStyle";
@@ -20339,7 +21020,7 @@ ${prefix}
       return [inputRule];
     }
   });
-  var inputRegex2 = /^\s*(\[([( |x])?\])\s$/;
+  var inputRegex3 = /^\s*(\[([( |x])?\])\s$/;
   var visuallyHiddenStyle = "position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0";
   var getCheckboxLabel = (node, checked, a11y) => {
     var _a11y$checkboxLabel;
@@ -20506,7 +21187,7 @@ ${prefix}
     },
     addInputRules() {
       return [wrappingInputRule({
-        find: inputRegex2,
+        find: inputRegex3,
         type: this.type,
         getAttributes: (match) => ({ checked: match[match.length - 1] === "x" })
       })];
@@ -20685,7 +21366,7 @@ ${prefix}
   });
 
   // node_modules/@tiptap/extension-strike/dist/index.js
-  var inputRegex3 = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))$/;
+  var inputRegex4 = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))$/;
   var pasteRegex = /(?:^|\s)(~~(?!\s+~~)((?:[^~]+))~~(?!\s+~~))/g;
   var Strike = Mark2.create({
     name: "strike",
@@ -20736,7 +21417,7 @@ ${prefix}
     },
     addInputRules() {
       return [markInputRule({
-        find: inputRegex3,
+        find: inputRegex4,
         type: this.type
       })];
     },
@@ -20759,71 +21440,6 @@ ${prefix}
       };
     },
     renderMarkdown: (node) => node.text || ""
-  });
-
-  // node_modules/@tiptap/extension-underline/dist/index.js
-  var Underline = Mark2.create({
-    name: "underline",
-    addOptions() {
-      return { HTMLAttributes: {} };
-    },
-    parseHTML() {
-      return [{ tag: "u" }, {
-        style: "text-decoration",
-        consuming: false,
-        getAttrs: (style2) => style2.includes("underline") ? {} : false
-      }];
-    },
-    renderHTML({ HTMLAttributes }) {
-      return [
-        "u",
-        mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
-        0
-      ];
-    },
-    parseMarkdown(token, helpers) {
-      return helpers.applyMark(this.name || "underline", helpers.parseInline(token.tokens || []));
-    },
-    renderMarkdown(node, helpers) {
-      return `++${helpers.renderChildren(node)}++`;
-    },
-    markdownTokenizer: {
-      name: "underline",
-      level: "inline",
-      start(src) {
-        return src.indexOf("++");
-      },
-      tokenize(src, _tokens, lexer) {
-        const match = /^(\+\+)([\s\S]+?)(\+\+)/.exec(src);
-        if (!match) return;
-        const innerContent = match[2].trim();
-        return {
-          type: "underline",
-          raw: match[0],
-          text: innerContent,
-          tokens: lexer.inlineTokens(innerContent)
-        };
-      }
-    },
-    addCommands() {
-      return {
-        setUnderline: () => ({ commands }) => {
-          return commands.setMark(this.name);
-        },
-        toggleUnderline: () => ({ commands }) => {
-          return commands.toggleMark(this.name);
-        },
-        unsetUnderline: () => ({ commands }) => {
-          return commands.unsetMark(this.name);
-        }
-      };
-    },
-    addKeyboardShortcuts() {
-      return {
-        "Mod-u": () => this.editor.commands.toggleUnderline(),
-        "Mod-U": () => this.editor.commands.toggleUnderline()
-      };
-    }
   });
 
   // node_modules/prosemirror-dropcursor/dist/index.js
@@ -22295,7 +22911,12 @@ ${prefix}
   if (textarea && editorElement) {
     const editor = new Editor({
       element: editorElement,
-      extensions: [StarterKit],
+      extensions: [
+        StarterKit,
+        Link.configure({ openOnClick: false }),
+        Image.configure({ allowBase64: false }),
+        Underline
+      ],
       content: textarea.value,
       editorProps: {
         attributes: { class: "tiptap-editor", role: "textbox", "aria-label": "Welcome message" }

@@ -21,6 +21,7 @@ if (!is_file($root . '/vendor/autoload.php')) {
 }
 require $root . '/vendor/autoload.php';
 require_once $root . '/lib/magirc/version.inc.php';
+MagircSecurity::sendSecurityHeaders();
 
 if (!is_file(MagircConfigStore::path('magirc', $root . '/conf')) && !is_file($root . '/conf/magirc.cfg.php')) {
     http_response_code(503);

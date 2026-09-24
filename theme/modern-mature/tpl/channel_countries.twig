@@ -69,7 +69,7 @@ $(document).ready(function() {
         ajax: "rest/service.php/channels/"+target+"/countries?format=datatables",
         columns: [
             { data: "country", render: function(data, type, row) {
-                return getCountryFlag(row) + ' ' + data;
+                return getCountryFlag(row) + ' ' + escapeTags(data);
             } },
             { data: "count" }
         ]
