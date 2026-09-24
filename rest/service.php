@@ -37,5 +37,5 @@ try {
         http_response_code(503);
     }
     header('Content-Type: application/json; charset=utf-8');
-    echo '{"error":"HTTP 500 Internal Server Error"}';
+    echo '{"error":"HTTP 503 Service Unavailable"}';
 }

@@ -42,10 +42,11 @@ class Admin {
 
         $this->slim->add(\Slim\Views\TwigMiddleware::create($this->slim, $this->tpl));
 
+        $csrfStorage = null;
         $guard = new \Slim\Csrf\Guard(
             $this->slim->getResponseFactory(),
             'csrf',
-            null,
+            $csrfStorage,
             function ($request, $handler) {
                 $response = $this->slim->getResponseFactory()->createResponse(403);
                 $response->getBody()->write('Forbidden');
@@ -63,7 +64,7 @@ class Admin {
         $this->slim->addRoutingMiddleware();
 
         $errors = $this->slim->addErrorMiddleware(false, true, true);
-        $errors->setDefaultErrorHandler(function ($request, $exception, $displayErrorDetails, $logErrors, $logErrorDetails, $logMessage) use ($logger) {
+        $errors->setDefaultErrorHandler(function ($request, $exception, $displayErrorDetails, $logErrors, $logErrorDetails) use ($logger) {
             $logger->error('MagIRC admin request failed.', ['exception_class' => $exception::class]);
             $status = $exception instanceof \Slim\Exception\HttpNotFoundException ? 404 : ($exception instanceof \Slim\Exception\HttpMethodNotAllowedException ? 405 : 500);
             $response = $this->slim->getResponseFactory()->createResponse($status);

@@ -65,7 +65,7 @@ class Magirc {
         $app->addRoutingMiddleware();
         $app->addBodyParsingMiddleware();
         $errors = $app->addErrorMiddleware(false, true, true);
-        $errors->setDefaultErrorHandler(function ($request, $exception, $displayErrorDetails, $logErrors, $logErrorDetails, $logMessage) use ($app, $useTemplateEngine, $logger) {
+        $errors->setDefaultErrorHandler(function ($request, $exception, $displayErrorDetails, $logErrors, $logErrorDetails) use ($app, $useTemplateEngine, $logger) {
             if ($logErrors) {
             $logger->error('MagIRC request failed.', ['exception_class' => $exception::class]);
             }
