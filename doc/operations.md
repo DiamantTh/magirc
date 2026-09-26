@@ -5,7 +5,10 @@
 Der einzige öffentliche DocumentRoot ist `httpdocs/`. Er enthält die vier
 HTTP-Einstiegspunkte für Statistikseiten, Administration, REST und Setup sowie
 Browser-Assets unter `httpdocs/assets/`. Stelle Apache/Nginx auf genau dieses
-Verzeichnis ein; die Beispielkonfigurationen verwenden denselben Root.
+Verzeichnis ein; die Beispielkonfigurationen verwenden denselben Root. Die
+Beispiele erwarten TLS-Zertifikate unter `/etc/letsencrypt/live/magirc.example.test/`;
+ersetze Servernamen, Zertifikatspfade, Projektpfad und PHP-FPM-Socket passend
+zur Installation. Apache benötigt `ssl`, `rewrite`, `proxy` und `proxy_fcgi`.
 
 `src/MagIRC/`, `vendor/`, `conf/`, `tmp/`, `locale/`, `resources/`, `templates/`
 und `themes/` bleiben privat. `conf/` enthält Datenbankzugänge und
@@ -14,6 +17,11 @@ Verzeichnisse müssen für den PHP-FPM/Apache-Benutzer schreibbar sein
 (empfohlen `0700`).
 
 ## Erstinstallation
+
+Ein fertiges Releasepaket enthält produktive Composer-Abhängigkeiten und die
+gebauten Browser-Assets. Dessen Zielserver braucht weder Composer noch Node.js,
+Yarn oder Docker. Für einen Git-Checkout oder ein Quellarchiv müssen Composer
+und Yarn auf einem Build-Rechner ausgeführt werden:
 
 1. PHP 8.4 oder 8.5 mit `pdo_mysql`, `gettext`, `mbstring`, `dom` und `xml`
    bereitstellen.

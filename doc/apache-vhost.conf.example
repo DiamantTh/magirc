@@ -1,7 +1,11 @@
-# Copy this virtual host to Apache and replace the paths and PHP-FPM socket.
+# Copy this virtual host to Apache and replace the paths, TLS certificate and PHP-FPM socket.
 <VirtualHost *:443>
     ServerName magirc.example.test
     DocumentRoot /srv/www/magirc/httpdocs
+
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/magirc.example.test/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/magirc.example.test/privkey.pem
 
     ErrorLog ${APACHE_LOG_DIR}/magirc-error.log
     CustomLog ${APACHE_LOG_DIR}/magirc-access.log combined

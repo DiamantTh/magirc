@@ -1,4 +1,4 @@
-import { accessSync, constants, readFileSync } from 'node:fs';
+import { accessSync, constants, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,4 +33,29 @@ for (const template of [
   }
 }
 
-console.log(`Runtime assets: OK (${required.length} files)`);
+const stylesheets = [];
+function collectStylesheets(directory) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const file = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      collectStylesheets(file);
+    } else if (entry.isFile() && file.endsWith('.css')) {
+      stylesheets.push(file);
+    }
+  }
+}
+
+collectStylesheets(resolve(root, 'httpdocs/assets'));
+for (const stylesheet of stylesheets) {
+  const source = readFileSync(stylesheet, 'utf8');
+  for (const match of source.matchAll(/url\(\s*(?:(["'])(.*?)\1|([^)]*?))\s*\)/g)) {
+    const url = (match[2] ?? match[3] ?? '').trim();
+    if (!url || /^(?:data:|https?:|\/\/|#|var\()/i.test(url)) {
+      continue;
+    }
+    const localPath = decodeURIComponent(url.split(/[?#]/, 1)[0]);
+    accessSync(resolve(stylesheet, '..', localPath), constants.R_OK);
+  }
+}
+
+console.log(`Runtime assets: OK (${required.length} files, ${stylesheets.length} stylesheets)`);

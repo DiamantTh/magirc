@@ -70,6 +70,7 @@
         "test:security": "sh tests/security/run.sh",
         "test:integration": "sh tests/integration/run.sh",
         "test:installation": "sh tests/installation/run.sh",
+        "release:package": "sh scripts/package-release.sh",
         "check": "sh scripts/check.sh read-only",
         "check:isolated": "sh scripts/check.sh isolated",
         "analyse": "phpstan analyse --no-progress --debug",

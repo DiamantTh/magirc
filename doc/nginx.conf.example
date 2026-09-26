@@ -1,9 +1,11 @@
-# Copy this server block to the site configuration and replace the paths.
+# Copy this server block to the site configuration and replace the paths and TLS certificate.
 server {
     listen 443 ssl;
     server_name magirc.example.test;
     root /srv/www/magirc/httpdocs;
     index index.php;
+    ssl_certificate /etc/letsencrypt/live/magirc.example.test/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/magirc.example.test/privkey.pem;
 
     access_log /var/log/nginx/magirc.access.log;
     error_log /var/log/nginx/magirc.error.log warn;

@@ -82,13 +82,12 @@ The public and REST routes are registered in `src/MagIRC/Routes`. Existing insta
    Setup is disabled after the first administrator is created. If you need to run the setup workflow again for maintenance, temporarily set the server environment variable `MAGIRC_ALLOW_SETUP=1`; this does not re-enable administrator creation.
 
 For a complete installation/update runbook, including database privileges, permissions, backups and troubleshooting, see [doc/operations.md](doc/operations.md). Apache and Nginx examples are in [doc/apache-vhost.conf.example](doc/apache-vhost.conf.example) and [doc/nginx.conf.example](doc/nginx.conf.example).
+Release packaging and the runtime/build-host split are described in [doc/release.md](doc/release.md).
 
 ### Using a release package ###
-1. Download the latest MagIRC release package from [GitHub](https://h9k.github.io/magirc/)
-2. Extract the MagIRC archive to your web server and move its content to the MagIRC directory.
-   A release archive must contain the generated `httpdocs/assets/vendor/` files and `httpdocs/assets/admin/js/welcome-editor.bundle.js`; if they are absent, run the build commands from the installation section before exposing the site.
-3. Use your web browser to navigate to the setup folder on your server and follow on-screen instructions.
-   Example: https://`yourpathtomagirc`/setup/
+1. A release maintainer creates the complete archive on a build machine with `composer release:package`; details are in [doc/release.md](doc/release.md). Ordinary GitHub source archives do not include generated runtime assets.
+2. Verify the `.sha256` file, then extract the archive outside the webroot. It includes production Composer dependencies and built frontend assets, so the target server does not need Composer, Node.js, Yarn or Docker.
+3. Point Apache or Nginx at the package's `httpdocs/`, set the documented `conf/` and `tmp/` permissions, and open `/setup/`.
 
 ### Using git ###
 You need a git client, [composer](https://getcomposer.org) and [yarn](https://yarnpkg.com)
