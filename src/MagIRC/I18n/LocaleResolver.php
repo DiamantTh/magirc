@@ -6,6 +6,33 @@ namespace MagIRC\I18n;
 
 final class LocaleResolver
 {
+    /** @return array<string, string> */
+    public static function labels(string $directory): array
+    {
+        $labels = [];
+        foreach (glob(rtrim($directory, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '*') ?: [] as $path) {
+            if (!is_dir($path)) {
+                continue;
+            }
+
+            $locale = basename($path);
+            $labels[$locale] = match ($locale) {
+                'en_US' => 'English',
+                'de_DE' => 'Deutsch',
+                'es_ES' => 'Español',
+                'fr_FR' => 'Français',
+                'it_IT' => 'Italiano',
+                'nl_NL' => 'Nederlands',
+                'ms_MY' => 'Melayu',
+                'tr_TR' => 'Türkçe',
+                'pt_PT' => 'Português',
+                default => $locale,
+            };
+        }
+
+        return $labels;
+    }
+
     /** @param list<string> $available */
     public static function resolve(
         ?string $requested,

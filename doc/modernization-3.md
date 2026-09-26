@@ -16,7 +16,7 @@ Schlüssel enthalten Datenquelle, Datenbankidentität ohne Passwort, Abfragetyp,
 
 ## Tiptap und HTML
 
-CKEditor 4 und sein Composer-Paket wurden entfernt. Tiptap Core 3 und StarterKit 3 werden mit esbuild lokal als `admin/js/welcome-editor.bundle.js` gebündelt; es wird kein Frontend-Framework eingeführt. Das Admin-Template behält die drei Begrüßungsoptionen und den gespeicherten HTML-Inhalt. `HtmlSanitizer` verarbeitet beim Laden und Speichern auch vorhandene Inhalte, erlaubt nur definierte Elemente/Attribute und entfernt Skripte, Eventattribute sowie unsichere URL-Schemata.
+CKEditor 4 und sein Composer-Paket wurden entfernt. Tiptap Core 3 und StarterKit 3 werden mit esbuild lokal als `httpdocs/assets/admin/js/welcome-editor.bundle.js` gebündelt; es wird kein Frontend-Framework eingeführt. Das Admin-Template behält die drei Begrüßungsoptionen und den gespeicherten HTML-Inhalt. `HtmlSanitizer` verarbeitet beim Laden und Speichern auch vorhandene Inhalte, erlaubt nur definierte Elemente/Attribute und entfernt Skripte, Eventattribute sowie unsichere URL-Schemata.
 
 ## Tests und Grenzen
 

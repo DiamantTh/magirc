@@ -49,21 +49,8 @@
         "psr-4": {
             "MagIRC\\": "src/MagIRC/"
         },
-        "classmap": [
-            "lib/magirc/Config.class.php",
-            "lib/magirc/ConfigStore.class.php",
-            "lib/magirc/DB.class.php",
-            "lib/magirc/Magirc.class.php",
-            "lib/magirc/MagircDB.php",
-            "lib/magirc/Security.class.php",
-            "lib/magirc/services/Anope.class.php",
-            "lib/magirc/services/Denora.class.php",
-            "lib/magirc/services/Service.interface.php",
-            "lib/magirc/objects/ChannelBase.class.php",
-            "lib/magirc/objects/ServerBase.class.php",
-            "lib/magirc/objects/UserBase.class.php",
-            "admin/lib/Admin.class.php",
-            "setup/lib/Setup.class.php"
+        "files": [
+            "src/MagIRC/Version.php"
         ]
     },
     "config": {

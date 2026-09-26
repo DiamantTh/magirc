@@ -8,11 +8,9 @@ use Rector\Set\ValueObject\SetList;
 return RectorConfig::configure()
     ->withPaths([
         __DIR__ . '/src',
-        __DIR__ . '/lib/magirc',
-        __DIR__ . '/admin',
-        __DIR__ . '/setup',
-        __DIR__ . '/rest',
-        __DIR__ . '/index.php',
+        __DIR__ . '/httpdocs',
+        __DIR__ . '/templates',
+        __DIR__ . '/themes',
     ])
     ->withPhpSets(php84: true)
     ->withSets([

@@ -27,10 +27,10 @@ if ($mode === 'cleanup') {
 $pdo->exec('DROP TABLE IF EXISTS ' . $tables);
 define('MAGIRC_CONF_DIR', $root . '/conf');
 require $root . '/vendor/autoload.php';
-require $root . '/lib/magirc/version.inc.php';
 
-$setup = (new ReflectionClass(Setup::class))->newInstanceWithoutConstructor();
-$setup->db = new DB($dsn, $user, $password);
+
+$setup = new \MagIRC\Installation\Installer(new \MagIRC\Bootstrap\ApplicationPaths($root));
+$setup->db = new \MagIRC\Database\Database($dsn, $user, $password);
 if (!$setup->configDump()) {
     throw new RuntimeException('HTTP fixture could not create the MagIRC schema.');
 }
@@ -50,8 +50,8 @@ $config = [
     'hostname' => $connection['host'] ?? '127.0.0.1',
     'port' => (int) ($connection['port'] ?? 3306),
 ];
-MagircConfigStore::save('magirc', $root . '/conf', $config);
-MagircConfigStore::save('anope', $root . '/conf', $config + ['prefix' => 'anope_http_']);
+\MagIRC\Config\ConfigurationStore::save('magirc', $root . '/conf', $config);
+\MagIRC\Config\ConfigurationStore::save('anope', $root . '/conf', $config + ['prefix' => 'anope_http_']);
 if (!$setup->createAdmin('ci-admin', 'Isolated-Test-Passphrase-2026')) {
     throw new RuntimeException('HTTP fixture could not create its test administrator.');
 }

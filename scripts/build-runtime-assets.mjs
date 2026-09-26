@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const sourceRoot = resolve(root, 'node_modules');
-const targetRoot = resolve(root, 'assets/vendor');
+const targetRoot = resolve(root, 'httpdocs/assets/vendor');
 
 const files = [
   ['jquery/dist/jquery.min.js', 'jquery/jquery.min.js'],

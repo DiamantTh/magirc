@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace MagIRC\Routes;
 
-use Magirc;
+use MagIRC\Bootstrap\Application;
 use Psr\Http\Message\ResponseInterface;
 use Slim\App;
 
@@ -16,7 +16,7 @@ function jsonResponse(ResponseInterface $response, mixed $payload): ResponseInte
 
 final class RestRoutes
 {
-    public static function register(App $app, Magirc $magirc): void
+    public static function register(App $app, Application $magirc): void
     {
         $validUserMode = static fn (string $mode): bool => in_array($mode, ['nick', 'stats'], true);
         $safeLimit = static function (mixed $value): int {

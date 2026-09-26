@@ -3,9 +3,11 @@
 MagIRC liest bestehende PHP-Konfigurationen nur mit einem Token-Parser. Neue
 Konfigurationen werden als JSON mit restriktiven Dateirechten geschrieben.
 Datei- und Themepfade werden auf bekannte Verzeichnisse begrenzt; IRCd-Dateien
-werden ausschließlich aus der festen `lib/magirc/ircds`-Allowlist geladen.
-Webserver-Beispiele und `.htaccess` sperren Konfigurationen, Quelltext,
-Templates, Logs, Cache, Abhängigkeiten, Tests und Repository-Metadaten.
+werden ausschließlich aus der festen `src/MagIRC/Services/Ircd`-Allowlist geladen.
+Der DocumentRoot ist auf `httpdocs/` begrenzt; dadurch liegen Konfigurationen,
+Quelltext, Templates, Logs, Cache, Abhängigkeiten und Tests außerhalb des
+öffentlichen Baums. Die Webserver-Beispiele führen nur die vorgesehenen
+PHP-Einstiegspunkte aus.
 
 Werte aus der bestehenden Konfiguration werden vor ihrer Verwendung in URL- und
 JavaScript-Kontexten normalisiert. Ungültige HTTP-URLs, Themes, Ports,

@@ -4,22 +4,22 @@ declare(strict_types=1);
 
 namespace MagIRC\Routes;
 
-use Magirc;
+use MagIRC\Bootstrap\Application;
 use Slim\App;
 use Slim\Views\Twig;
 
 final class WebRoutes
 {
-    public static function register(App $app, Magirc $magirc): void
+    public static function register(App $app, Application $magirc): void
     {
         /** @var Twig $view */
         $view = $app->getContainer()->get(Twig::class);
         $config = $magirc->cfg->config;
         $locales = $magirc->getLocalesSelect();
-        $themeRoot = realpath(dirname(__DIR__, 3) . '/theme');
-        $themePath = $themeRoot === false ? false : realpath($themeRoot . DIRECTORY_SEPARATOR . basename((string) $magirc->cfg->theme) . DIRECTORY_SEPARATOR . 'tpl');
+        $themeRoot = realpath($magirc->paths()->private('themes'));
+        $themePath = $themeRoot === false ? false : realpath($themeRoot . DIRECTORY_SEPARATOR . basename((string) $magirc->cfg->theme) . DIRECTORY_SEPARATOR . 'templates');
         if ($themeRoot === false || $themePath === false || !str_starts_with($themePath, $themeRoot . DIRECTORY_SEPARATOR)) {
-            $themePath = $themeRoot === false ? false : realpath($themeRoot . '/default/tpl');
+            $themePath = $themeRoot === false ? false : realpath($themeRoot . '/default/templates');
         }
         if ($themePath === false) {
             throw new \RuntimeException('No valid theme template directory is available.');

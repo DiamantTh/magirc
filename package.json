@@ -2,7 +2,6 @@
   "name": "@h9k/magirc",
   "version": "1.7.1",
   "description": "Web frontend for Anope and Denora IRC statistics",
-  "main": "index.php",
   "repository": "https://h9k@github.com/h9k/magirc.git",
   "author": "h9k <h9k@users.noreply.github.com>",
   "license": "GPL-3.0-or-later",
@@ -31,7 +30,7 @@
     "esbuild": "^0.25.0"
   },
   "scripts": {
-    "build:editor": "esbuild admin/js/welcome-editor.js --bundle --format=iife --outfile=admin/js/welcome-editor.bundle.js",
+    "build:editor": "esbuild resources/admin/welcome-editor.js --bundle --format=iife --outfile=httpdocs/assets/admin/js/welcome-editor.bundle.js",
     "build:runtime": "node scripts/build-runtime-assets.mjs",
     "test:editor": "node tests/frontend/editor-bundle-test.mjs",
     "test:runtime-assets": "node tests/frontend/runtime-assets-test.mjs"

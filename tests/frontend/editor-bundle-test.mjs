@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 
-const bundle = readFileSync(new URL('../../admin/js/welcome-editor.bundle.js', import.meta.url), 'utf8');
+const bundle = readFileSync(new URL('../../httpdocs/assets/admin/js/welcome-editor.bundle.js', import.meta.url), 'utf8');
 if (!bundle.includes('tiptap-editor') || !bundle.includes('Welcome message')) {
     throw new Error('The Tiptap welcome editor bundle is missing the expected editor contract.');
 }

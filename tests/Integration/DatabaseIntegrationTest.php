@@ -49,15 +49,15 @@ final class DatabaseIntegrationTest extends TestCase
         $directory = sys_get_temp_dir() . '/magirc-integration-' . bin2hex(random_bytes(6));
         mkdir($directory, 0700, true);
         try {
-            $config = \MagircConfigStore::defaults($service);
+            $config = \MagIRC\Config\ConfigurationStore::defaults($service);
             $config['database'] = 'magirc_test';
             $config['hostname'] = '127.0.0.1';
             $config['port'] = (int) (getenv('MAGIRC_TEST_DB_PORT') ?: 3306);
-            \MagircConfigStore::save($service, $directory, $config);
-            $loaded = \MagircConfigStore::load($service, $directory);
+            \MagIRC\Config\ConfigurationStore::save($service, $directory, $config);
+            $loaded = \MagIRC\Config\ConfigurationStore::load($service, $directory);
             self::assertSame('magirc_test', $loaded['database']);
-            self::assertStringContainsString('charset=utf8mb4', \MagircConfigStore::dsn($loaded));
-            self::assertFalse((bool) \MagircConfigStore::pdoOptions($loaded)[\PDO::ATTR_PERSISTENT]);
+            self::assertStringContainsString('charset=utf8mb4', \MagIRC\Config\ConfigurationStore::dsn($loaded));
+            self::assertFalse((bool) \MagIRC\Config\ConfigurationStore::pdoOptions($loaded)[\PDO::ATTR_PERSISTENT]);
         } finally {
             @unlink($directory . '/' . $service . '.json');
             @rmdir($directory);
@@ -71,7 +71,7 @@ final class DatabaseIntegrationTest extends TestCase
 
     private static function serviceWithFixtures(string $class, object $config): object
     {
-        $db = new \DB(
+        $db = new \MagIRC\Database\Database(
             (string) getenv('MAGIRC_TEST_DSN'),
             (string) (getenv('MAGIRC_TEST_DB_USER') ?: 'root'),
             (string) (getenv('MAGIRC_TEST_DB_PASSWORD') ?: '')
@@ -84,9 +84,9 @@ final class DatabaseIntegrationTest extends TestCase
         return $service;
     }
 
-    private static function magircForService(object $service): \Magirc
+    private static function magircForService(object $service): \MagIRC\Bootstrap\Application
     {
-        $magirc = (new \ReflectionClass(\Magirc::class))->newInstanceWithoutConstructor();
+        $magirc = (new \ReflectionClass(\MagIRC\Bootstrap\Application::class))->newInstanceWithoutConstructor();
         $magirc->service = $service;
         return $magirc;
     }
@@ -95,10 +95,7 @@ final class DatabaseIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testAnopeConnectionStatisticsVisibilityAndRestResponse(): void
     {
-        require_once dirname(__DIR__, 2) . '/lib/magirc/ircds/unreal32.inc.php';
-        require_once dirname(__DIR__, 2) . '/lib/magirc/objects/anope/Channel.class.php';
-        require_once dirname(__DIR__, 2) . '/lib/magirc/objects/anope/Server.class.php';
-        require_once dirname(__DIR__, 2) . '/lib/magirc/objects/anope/User.class.php';
+        \MagIRC\Services\Ircd\ProtocolRegistry::select('unreal32');
         self::defineAnopeTables();
         $pdo = self::database();
         self::assertConfigurationRoundTrip('anope');
@@ -109,7 +106,7 @@ final class DatabaseIntegrationTest extends TestCase
             'block_schans' => true,
             'block_pchans' => true,
         ];
-        $service = self::serviceWithFixtures('Anope', $config);
+        $service = self::serviceWithFixtures(\MagIRC\Services\Anope\AnopeService::class, $config);
 
         self::assertSame(12, $service->getCurrentStatus()['users']['val']);
         self::assertSame(4, $service->getMaxValues()['users']['val']);
@@ -152,10 +149,7 @@ final class DatabaseIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testDenoraConnectionUsesDifferentTableLayoutAndRestResponse(): void
     {
-        require_once dirname(__DIR__, 2) . '/lib/magirc/ircds/unreal32.inc.php';
-        require_once dirname(__DIR__, 2) . '/lib/magirc/objects/denora/Channel.class.php';
-        require_once dirname(__DIR__, 2) . '/lib/magirc/objects/denora/Server.class.php';
-        require_once dirname(__DIR__, 2) . '/lib/magirc/objects/denora/User.class.php';
+        \MagIRC\Services\Ircd\ProtocolRegistry::select('unreal32');
         self::defineDenoraTables();
         $pdo = self::database();
         self::assertConfigurationRoundTrip('denora');
@@ -166,7 +160,7 @@ final class DatabaseIntegrationTest extends TestCase
             'block_schans' => true,
             'block_pchans' => true,
         ];
-        $service = self::serviceWithFixtures('Denora', $config);
+        $service = self::serviceWithFixtures(\MagIRC\Services\Denora\DenoraService::class, $config);
 
         self::assertSame(12, $service->getCurrentStatus()['users']['val']);
         self::assertSame(4, $service->getMaxValues()['users']['val']);

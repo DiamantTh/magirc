@@ -135,9 +135,9 @@ try {
     $cookies = ['PHPSESSID' => 'attacker-controlled-session-id'];
     check(request('/admin/index.php/configuration/welcome')['status'] === 403, 'Manipulated session cookie grants admin access.');
 
-    check(request('/setup/index.php')['status'] === 404, 'Completed installation leaves Setup enabled.');
-    check(request('/setup/index.php', 'POST', [], ['savedb' => '1'])['status'] === 403, 'Installer POST accepted a missing CSRF token.');
-    check(request('/admin/js/welcome-editor.bundle.js')['status'] === 200, 'Tiptap bundle is unavailable over HTTP.');
+    check(request('/setup/')['status'] === 404, 'Completed installation leaves Setup enabled.');
+    check(request('/setup/?step=2', 'POST', [], ['savedb' => '1'])['status'] === 403, 'Installer POST accepted a missing CSRF token.');
+    check(request('/assets/admin/js/welcome-editor.bundle.js')['status'] === 200, 'Tiptap bundle is unavailable over HTTP.');
 
     $configPath = $appRoot . '/conf/magirc.json';
     $config = json_decode((string) file_get_contents($configPath), true, 512, JSON_THROW_ON_ERROR);

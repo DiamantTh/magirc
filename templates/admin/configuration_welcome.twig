@@ -1,0 +1,45 @@
+<h1>Welcome message</h1>
+<p>You can welcome your users, describe your network, and put whatever information you want in here.</p>
+<form id="welcome-form">
+    <input type="hidden" name="csrf_name" value="{{ csrf.csrf_name|e }}" />
+    <input type="hidden" name="csrf_value" value="{{ csrf.csrf_value|e }}" />
+    <input type="radio" name="welcome_mode" value="statuspage"{% if cfg.welcome_mode == 'statuspage' %} checked="checked"{% endif %} /> Show the welcome message on the live network status page<br />
+    <input type="radio" name="welcome_mode" value="ownpage"{% if cfg.welcome_mode == 'ownpage' %} checked="checked"{% endif %} /> Show the welcome message as a separate tab in the network section<br />
+    <input type="radio" name="welcome_mode" value="disabled"{% if cfg.welcome_mode == 'disabled' %} checked="checked"{% endif %} /> Disable the welcome message<br />
+</form>
+<br />
+<form id="content-form">
+    <input type="hidden" name="csrf_name" value="{{ csrf.csrf_name|e }}" />
+    <input type="hidden" name="csrf_value" value="{{ csrf.csrf_value|e }}" />
+    <textarea id="welcome-content" name="welcome" hidden>{{ content|e }}</textarea>
+    <div id="welcome-editor" class="tiptap-editor-container"></div>
+</form>
+<br /><button id="welcome-submit" type="button">Save</button>
+
+<link rel="stylesheet" href="../assets/admin/css/tiptap-editor.css" />
+<script type="text/javascript" src="../assets/admin/js/welcome-editor.bundle.js"></script>
+<script type="text/javascript">
+$(document).ready(function() {
+    $("#welcome-submit").button().click(function() {
+        var success = true;
+        $("#welcome-form").ajaxSubmit({
+            url: 'index.php/configuration',
+            type: 'post',
+            success: function(data) {
+                if (!data) success = false;
+            }
+        });
+        $("#content-form").ajaxSubmit({
+            url: 'index.php/content',
+            type: 'post',
+            data: { welcome: $('#welcome-content').val(), csrf_name: $('input[name=csrf_name]').val(), csrf_value: $('input[name=csrf_value]').val() },
+            success: function(data) {
+                if (!data) success = false;
+            }
+        });
+        if (success) $("#success").show().delay(1500).fadeOut(500);
+        else $("#failure").show().delay(1500).fadeOut(500);
+    });
+
+});
+</script>

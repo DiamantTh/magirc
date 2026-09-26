@@ -9,6 +9,12 @@ We recommend using Anope, since it is being actively maintained and has improved
 In case you want to migrate from Denora to Anope, we created a script for this task (see below).
 
 ### Main features ###
+
+`httpdocs/` is the only public document root. Point Apache or Nginx there;
+PHP application code, Composer dependencies, configuration, templates, SQL,
+locale catalogs and runtime files remain outside it. The public URLs for
+statistics, administration, REST and setup are preserved under that root.
+
 * REST service
 * [Twig](https://twig.sensiolabs.org) templating engine
 * [jQuery](https://www.jquery.com/)-based UI with AJAX interactions
@@ -16,6 +22,15 @@ In case you want to migrate from Denora to Anope, we created a script for this t
 * Easy installation
 * Administration panel
 * Slick design
+
+### Project layout ###
+
+* `httpdocs/` contains only the four HTTP entry points and browser-delivered assets.
+* `src/MagIRC/` contains the shared PHP application, grouped by its responsibilities: bootstrap, admin, installer, database, HTTP, routes, security, IRC services and statistics.
+* `templates/` contains private admin and setup Twig templates. `themes/<name>/templates/` contains each statistics theme; its public CSS, JavaScript, images and fonts live in `httpdocs/assets/themes/<name>/`.
+* `resources/` holds non-public application inputs such as SQL schemas and the Tiptap editor source. `locale/` keeps the translated PO and compiled MO catalogs.
+* `conf/` stores installation-specific configuration and markers; `tmp/` stores logs and runtime caches. Neither is under the document root.
+* `tests/`, `scripts/` and `doc/` contain quality checks, build/maintenance tools and operator documentation. `vendor/` and `node_modules/` are generated dependencies, not application source.
 
 ### Requirements ###
 * Web server with PHP 8.4 or newer and the `pdo_mysql`, `gettext`, `mbstring`, `dom` and `xml` extensions installed
@@ -42,7 +57,7 @@ Security controls and remaining deployment risks are documented in [doc/security
 	- `composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader`
 	- `yarn install --frozen-lockfile --production=false`
 	- `yarn build:editor && yarn build:runtime`
-	- Remove `node_modules/` from the webroot after the build; the application serves only `assets/vendor/` and the bundled editor at runtime.
+	- The web server serves generated files only from `httpdocs/assets/`; `node_modules/` and Composer `vendor/` remain outside the document root.
 2. Create writable `conf/` and `tmp/` directories for the web server user (recommended mode `0700`), while keeping their deny rules in place. The installer stores new database settings in `conf/*.json`; it reads legacy `conf/*.cfg.php` files without executing their contents.
 3. Use your web browser to navigate to the setup folder on your server and follow on-screen instructions.
    Example: https://`yourpathtomagirc`/setup/
@@ -57,13 +72,13 @@ Security controls and remaining deployment risks are documented in [doc/security
 * `composer analyse` runs PHPStan; `composer cs` checks PSR-12; `composer rector:check` checks the configured PHP 8.4 Rector set.
 * `yarn install --frozen-lockfile` reproduces the frontend dependencies from `yarn.lock`.
 * `yarn build:editor` rebuilds the locally bundled Tiptap welcome editor.
-* `yarn build:runtime` copies the browser runtime files to `assets/vendor`; `yarn test:runtime-assets` verifies the production asset set.
+* `yarn build:runtime` copies the browser runtime files to `httpdocs/assets/vendor`; `yarn test:runtime-assets` verifies the production asset set.
 
 Database-backed Anope/Denora integration tests and their required environment variables are documented in [doc/integration-tests.md](doc/integration-tests.md).
 
 The optional GitHub workflow starts only through `workflow_dispatch` and calls `composer check:isolated` after installing and building dependencies. GitHub repository settings currently allow only local Actions, so that optional workflow cannot start its external setup Actions until the repository owner separately changes that policy. Native checks do not depend on GitHub Actions.
 
-The public and REST routes are registered in `src/MagIRC/Routes`; theme directories contain templates and presentation assets only. Existing installations using `conf/*.cfg.php` remain readable, while all new writes use validated JSON configuration files. Gettext still uses the native PO/MO directory contract (`locale/<locale>/LC_MESSAGES/messages.*`); this upstream snapshot does not contain tracked catalog files, so the English msgid is the fallback until catalogs are supplied.
+The public and REST routes are registered in `src/MagIRC/Routes`. Existing installations using `conf/*.cfg.php` remain readable, while all new writes use validated JSON configuration files. Gettext uses the native PO/MO directory contract, and the translated source catalogs plus their compiled catalogs are kept under `locale/<locale>/LC_MESSAGES/`.
    Setup is disabled after the first administrator is created. If you need to run the setup workflow again for maintenance, temporarily set the server environment variable `MAGIRC_ALLOW_SETUP=1`; this does not re-enable administrator creation.
 
 For a complete installation/update runbook, including database privileges, permissions, backups and troubleshooting, see [doc/operations.md](doc/operations.md). Apache and Nginx examples are in [doc/apache-vhost.conf.example](doc/apache-vhost.conf.example) and [doc/nginx.conf.example](doc/nginx.conf.example).
@@ -71,7 +86,7 @@ For a complete installation/update runbook, including database privileges, permi
 ### Using a release package ###
 1. Download the latest MagIRC release package from [GitHub](https://h9k.github.io/magirc/)
 2. Extract the MagIRC archive to your web server and move its content to the MagIRC directory.
-   A release archive must contain the generated `assets/vendor/` files and `admin/js/welcome-editor.bundle.js`; if they are absent, run the build commands from the installation section before exposing the site.
+   A release archive must contain the generated `httpdocs/assets/vendor/` files and `httpdocs/assets/admin/js/welcome-editor.bundle.js`; if they are absent, run the build commands from the installation section before exposing the site.
 3. Use your web browser to navigate to the setup folder on your server and follow on-screen instructions.
    Example: https://`yourpathtomagirc`/setup/
 
@@ -104,7 +119,7 @@ You need Anope 2.0.0 or later and the following modules enabled and set up:
 These modules are included in the Anope codebase under `extra`. Please refer to the Anope documentation on how to set those up.
 
 Also, you will need additional database tables, views and stored procedures for the Anope database in order to get the data needed by MagIRC.
-Please look at the `setup/sql/anope.sql` file and adapt it if needed (table prefixes, etc.) and run it against your Anope database.
+Please look at the `resources/sql/anope.sql` file and adapt it if needed (table prefixes, etc.) and run it against your Anope database.
 
 Note that you need the MySQL `event_scheduler` set to `ON` in the MySQL server. If you have enough rights, you can turn it on via `SET GLOBAL event_scheduler = ON;`.
 
@@ -118,7 +133,7 @@ If you want to switch from Denora to Anope, please proceed as follows:
 1. Install Anope (see above)
 2. Shut down Denora
 3. Make Anope join the network and double check that it is working fine, e.g. the MySQL tables are being filled with data
-4. Configure the `setup/tools/denora2anope.php` script and then run it from command line with `php denora2anope.php`. Be patient and do not interrupt the process!
+4. Configure `scripts/denora2anope.php` and run it from the project root with `php scripts/denora2anope.php`. Be patient and do not interrupt the process!
 
 
 ## Denora configuration ##
@@ -157,7 +172,7 @@ To use this feature **enable** the following parameters by removing the '#' in f
 ### Apache ###
 The `AcceptPathInfo` directive should be set to `Default` or `On` in the Apache configuration. It is by default on most servers.
 
-To enable URL rewriting make sure your apache has the `mod_rewrite` module enabled. Then rename `htaccess.txt` to `.htaccess` and enable rewriting in the MagIRC Admin Panel.
+For clean statistics URLs, enable Apache `mod_rewrite` (the shipped `httpdocs/.htaccess` contains the rewrite rules) or use the supplied Nginx example, then enable URL rewriting in the MagIRC Admin Panel. Keep the web server document root set to `httpdocs/`.
 This is optional, MagIRC also works without rewriting on Apache.
 
 For a vhost with `AllowOverride None`, use the [Apache example](doc/apache-vhost.conf.example), which includes the equivalent internal-path restrictions and PHP-FPM handling.

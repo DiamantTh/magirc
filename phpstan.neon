@@ -4,5 +4,6 @@ parameters:
         - src
     bootstrapFiles:
         - vendor/autoload.php
+        - phpstan-bootstrap.php
     parallel:
         maximumNumberOfProcesses: 1

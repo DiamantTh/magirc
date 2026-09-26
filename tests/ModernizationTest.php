@@ -6,6 +6,8 @@ namespace MagIRC\Tests;
 
 use DI\Container;
 use MagIRC\I18n\LocaleResolver;
+use MagIRC\Bootstrap\Application;
+use MagIRC\Bootstrap\ApplicationPaths;
 use MagIRC\Cache\StatisticsCache;
 use MagIRC\Http\PublicStatisticsCacheMiddleware;
 use MagIRC\Http\SecurityHeadersMiddleware;
@@ -38,26 +40,26 @@ final class ModernizationTest extends TestCase
 
     public function testTwig3CompilesTrackedTemplatesAndRendersMarkdown(): void
     {
-        $theme = Twig::create(dirname(__DIR__) . '/theme/default/tpl', ['cache' => false]);
+        $theme = Twig::create(dirname(__DIR__) . '/themes/default/templates', ['cache' => false]);
         $theme->addExtension(new TranslationExtension());
-        foreach (glob(dirname(__DIR__) . '/theme/default/tpl/*.twig') ?: [] as $file) {
+        foreach (glob(dirname(__DIR__) . '/themes/default/templates/*.twig') ?: [] as $file) {
             $theme->getEnvironment()->load(basename($file));
         }
 
-        $modern = Twig::create(dirname(__DIR__) . '/theme/modern-mature/tpl', ['cache' => false]);
+        $modern = Twig::create(dirname(__DIR__) . '/themes/modern-mature/templates', ['cache' => false]);
         $modern->addExtension(new TranslationExtension());
-        foreach (glob(dirname(__DIR__) . '/theme/modern-mature/tpl/*.twig') ?: [] as $file) {
+        foreach (glob(dirname(__DIR__) . '/themes/modern-mature/templates/*.twig') ?: [] as $file) {
             $modern->getEnvironment()->load(basename($file));
         }
 
-        $admin = Twig::create(dirname(__DIR__) . '/admin/tpl', ['cache' => false]);
+        $admin = Twig::create(dirname(__DIR__) . '/templates/admin', ['cache' => false]);
         $admin->addExtension(new TranslationExtension());
         $admin->addExtension(new MarkdownExtension());
-        foreach (glob(dirname(__DIR__) . '/admin/tpl/*.twig') ?: [] as $file) {
+        foreach (glob(dirname(__DIR__) . '/templates/admin/*.twig') ?: [] as $file) {
             $admin->getEnvironment()->load(basename($file));
         }
-        $setup = Twig::create(dirname(__DIR__) . '/setup/tpl', ['cache' => false]);
-        foreach (glob(dirname(__DIR__) . '/setup/tpl/*.twig') ?: [] as $file) {
+        $setup = Twig::create(dirname(__DIR__) . '/templates/setup', ['cache' => false]);
+        foreach (glob(dirname(__DIR__) . '/templates/setup/*.twig') ?: [] as $file) {
             $setup->getEnvironment()->load(basename($file));
         }
         $response = $admin->render(new \Slim\Psr7\Response(), 'support_markdown.twig', ['text' => '# Report']);
@@ -77,27 +79,87 @@ final class ModernizationTest extends TestCase
     {
         foreach (
             [
-                dirname(__DIR__) . '/theme/default/tpl/layout.twig',
-                dirname(__DIR__) . '/theme/modern-mature/tpl/layout.twig',
-                dirname(__DIR__) . '/admin/tpl/layout.twig',
-                dirname(__DIR__) . '/setup/tpl/layout.twig',
+                dirname(__DIR__) . '/themes/default/templates/layout.twig',
+                dirname(__DIR__) . '/themes/modern-mature/templates/layout.twig',
+                dirname(__DIR__) . '/templates/admin/layout.twig',
+                dirname(__DIR__) . '/templates/setup/layout.twig',
             ] as $template
         ) {
             $source = (string) file_get_contents($template);
             self::assertStringNotContainsString('node_modules/', $source, $template);
             self::assertStringContainsString('assets/vendor/', $source, $template);
         }
-        self::assertStringNotContainsString("node_modules'", (string) file_get_contents(dirname(__DIR__) . '/index.php'));
-        self::assertStringNotContainsString("node_modules'", (string) file_get_contents(dirname(__DIR__) . '/admin/index.php'));
+        self::assertStringNotContainsString("node_modules'", (string) file_get_contents(dirname(__DIR__) . '/httpdocs/index.php'));
+        self::assertStringNotContainsString("node_modules'", (string) file_get_contents(dirname(__DIR__) . '/httpdocs/admin/index.php'));
     }
 
     public function testWebserverExamplesDenyInternalSourceDirectory(): void
     {
-        foreach (['doc/apache-vhost.conf.example', 'doc/nginx.conf.example', 'htaccess.txt'] as $file) {
+        foreach (['doc/apache-vhost.conf.example', 'doc/nginx.conf.example'] as $file) {
             $source = (string) file_get_contents(dirname(__DIR__) . '/' . $file);
-            self::assertStringContainsString('src', $source, $file);
-            self::assertStringContainsString('vendor', $source, $file);
-            self::assertStringContainsString('.git', $source, $file);
+            self::assertStringContainsString('/srv/www/magirc/httpdocs', $source, $file);
+            self::assertStringContainsString('index.php', $source, $file);
+        }
+        $nginx = (string) file_get_contents(dirname(__DIR__) . '/doc/nginx.conf.example');
+        self::assertStringContainsString('fastcgi_param SCRIPT_NAME $script;', $nginx);
+        self::assertStringContainsString('fastcgi_param PATH_INFO $pathinfo;', $nginx);
+        $rules = (string) file_get_contents(dirname(__DIR__) . '/httpdocs/.htaccess');
+        self::assertStringContainsString('!^/(?:index\\.php|admin/index\\.php|rest/service\\.php|setup/index\\.php)', $rules);
+        self::assertStringContainsString('admin/index\\.php', $rules);
+        self::assertStringContainsString('rest/service\\.php', $rules);
+        self::assertStringContainsString('setup/index\\.php', $rules);
+    }
+
+    public function testHttpdocsIsTheOnlyPublicPhpTreeAndComposerUsesOnlyPsr4(): void
+    {
+        $entries = [];
+        $publicFiles = [];
+        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(dirname(__DIR__) . '/httpdocs', \FilesystemIterator::SKIP_DOTS));
+        foreach ($iterator as $file) {
+            if ($file->isFile()) {
+                $relativePath = substr($file->getPathname(), strlen(dirname(__DIR__) . '/httpdocs/'));
+                if (!str_starts_with($relativePath, 'assets/')) {
+                    $publicFiles[] = $relativePath;
+                }
+                if ($file->getExtension() === 'php') {
+                    $entries[] = $relativePath;
+                }
+            }
+        }
+        sort($entries);
+        sort($publicFiles);
+        self::assertSame(['admin/index.php', 'index.php', 'rest/service.php', 'setup/index.php'], $entries);
+        self::assertSame(['.htaccess', 'admin/index.php', 'index.php', 'rest/service.php', 'setup/index.php'], $publicFiles);
+        $composer = json_decode((string) file_get_contents(dirname(__DIR__) . '/composer.json'), true, 512, JSON_THROW_ON_ERROR);
+        self::assertArrayNotHasKey('classmap', $composer['autoload']);
+        $package = json_decode((string) file_get_contents(dirname(__DIR__) . '/package.json'), true, 512, JSON_THROW_ON_ERROR);
+        self::assertArrayNotHasKey('main', $package, 'The PHP front controller is not a Node package entry point.');
+        self::assertDirectoryDoesNotExist(dirname(__DIR__) . '/lib');
+        self::assertDirectoryDoesNotExist(dirname(__DIR__) . '/admin');
+        self::assertDirectoryDoesNotExist(dirname(__DIR__) . '/setup');
+        $setupEntry = (string) file_get_contents(dirname(__DIR__) . '/httpdocs/setup/index.php');
+        self::assertStringContainsString('SlimApplicationFactory::create', $setupEntry);
+        self::assertStringContainsString('SetupRoutes::register', $setupEntry);
+    }
+
+    #[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+    #[\PHPUnit\Framework\Attributes\PreserveGlobalState(false)]
+    public function testSharedBootstrapResolvesPrivateConfigurationFromProjectRoot(): void
+    {
+        $root = sys_get_temp_dir() . '/magirc-bootstrap-' . bin2hex(random_bytes(6));
+        mkdir($root . '/conf', 0700, true);
+        mkdir($root . '/tmp', 0700);
+
+        try {
+            $paths = \MagIRC\Bootstrap\ApplicationBootstrap::initialize($root);
+
+            self::assertSame($root, $paths->root);
+            self::assertSame($root . '/conf', MAGIRC_CONF_DIR);
+            self::assertSame($root . '/conf/magirc.json', MAGIRC_CFG_FILE);
+        } finally {
+            @rmdir($root . '/conf');
+            @rmdir($root . '/tmp');
+            @rmdir($root);
         }
     }
 
@@ -106,7 +168,7 @@ final class ModernizationTest extends TestCase
         $container = new Container();
         AppFactory::setContainer($container);
         $app = AppFactory::create();
-        $magirc = (new \ReflectionClass(\Magirc::class))->newInstanceWithoutConstructor();
+        $magirc = (new \ReflectionClass(Application::class))->newInstanceWithoutConstructor();
         $magirc->service = new class {
             public function getCurrentStatus(): array
             {
@@ -135,8 +197,8 @@ final class ModernizationTest extends TestCase
         $container = new Container();
         AppFactory::setContainer($container);
         $app = AppFactory::create();
-        $container->set(Twig::class, Twig::create(dirname(__DIR__) . '/theme/default/tpl', ['cache' => false]));
-        $magirc = (new \ReflectionClass(\Magirc::class))->newInstanceWithoutConstructor();
+        $container->set(Twig::class, Twig::create(dirname(__DIR__) . '/themes/default/templates', ['cache' => false]));
+        $magirc = (new \ReflectionClass(Application::class))->newInstanceWithoutConstructor();
         $magirc->cfg = (object) ['theme' => 'default', 'config' => []];
         $magirc->service = new class {
             public function checkChannel(string $channel): int
@@ -149,16 +211,17 @@ final class ModernizationTest extends TestCase
                 return true;
             }
         };
+        (new \ReflectionProperty(Application::class, 'paths'))->setValue($magirc, new ApplicationPaths(dirname(__DIR__)));
         WebRoutes::register($app, $magirc);
 
         self::assertNotEmpty($app->getRouteCollector()->getRoutes());
-        self::assertFileDoesNotExist(dirname(__DIR__) . '/theme/default/slim/routes.inc.php');
-        self::assertFileDoesNotExist(dirname(__DIR__) . '/theme/modern-mature/slim/routes.inc.php');
+        self::assertFileDoesNotExist(dirname(__DIR__) . '/themes/default/slim/routes.inc.php');
+        self::assertFileDoesNotExist(dirname(__DIR__) . '/themes/modern-mature/slim/routes.inc.php');
     }
 
     public function testPdoLayerUsesExceptionsAndReturnsSafeErrors(): void
     {
-        $database = new \DB('sqlite::memory:', '', '', []);
+        $database = new \MagIRC\Database\Database('sqlite::memory:', '', '', []);
         self::assertTrue($database->query('CREATE TABLE items (id INTEGER PRIMARY KEY, label TEXT)'));
         self::assertTrue($database->query("INSERT INTO items (label) VALUES ('Anope / Denora')"));
         self::assertTrue($database->query('SELECT label FROM items', SQL_ALL, SQL_ASSOC));
@@ -169,7 +232,7 @@ final class ModernizationTest extends TestCase
 
     public function testDataTablesFilteringOrderingAndPagingUseSafeServerSideFragments(): void
     {
-        $database = new \DB('sqlite::memory:', '', '', []);
+        $database = new \MagIRC\Database\Database('sqlite::memory:', '', '', []);
         $_GET = [
             'search' => ['value' => 'public'],
             'columns' => [['data' => 'channel', 'orderable' => 'true']],
@@ -187,7 +250,7 @@ final class ModernizationTest extends TestCase
 
     public function testGenericDatabaseHelpersRejectUntrustedIdentifiers(): void
     {
-        $database = new \DB('sqlite::memory:', '', '', []);
+        $database = new \MagIRC\Database\Database('sqlite::memory:', '', '', []);
         self::assertTrue($database->query('CREATE TABLE items (id INTEGER PRIMARY KEY, label TEXT)'));
         $this->expectException(\InvalidArgumentException::class);
         $database->selectOne('items` WHERE 1=1 --', ['id' => 1]);
@@ -195,7 +258,7 @@ final class ModernizationTest extends TestCase
 
     public function testGenericDatabaseHelpersRejectUntrustedLimits(): void
     {
-        $database = new \DB('sqlite::memory:', '', '', []);
+        $database = new \MagIRC\Database\Database('sqlite::memory:', '', '', []);
         self::assertTrue($database->query('CREATE TABLE items (id INTEGER PRIMARY KEY, label TEXT)'));
         $this->expectException(\InvalidArgumentException::class);
         $database->selectAll('items', null, null, 'ASC', '1 UNION SELECT password FROM users');
@@ -203,7 +266,7 @@ final class ModernizationTest extends TestCase
 
     public function testDatabaseConnectionFailureKeepsInternalDetailsPrivate(): void
     {
-        $database = new \DB('mysql:host=127.0.0.1;port=1;dbname=unavailable', '', '', [\PDO::ATTR_TIMEOUT => 1]);
+        $database = new \MagIRC\Database\Database('mysql:host=127.0.0.1;port=1;dbname=unavailable', '', '', [\PDO::ATTR_TIMEOUT => 1]);
         self::assertFalse($database->error === null);
         self::assertSame('Database connection failed.', $database->error);
     }
@@ -214,7 +277,7 @@ final class ModernizationTest extends TestCase
             ['country' => 'United States', 'country_code' => 'US', 'count' => 60],
             ['country' => 'Unknown', 'country_code' => '??', 'count' => 40],
         ];
-        foreach ([\Anope::class, \Denora::class] as $serviceClass) {
+        foreach ([\MagIRC\Services\Anope\AnopeService::class, \MagIRC\Services\Denora\DenoraService::class] as $serviceClass) {
             $service = (new \ReflectionClass($serviceClass))->newInstanceWithoutConstructor();
             $result = $service->makeCountryPieData($fixtures, 100);
             self::assertCount(2, $result, $serviceClass . ' returned an unexpected data shape.');
@@ -305,9 +368,20 @@ final class ModernizationTest extends TestCase
         self::assertSame(300, $cache->ttls[array_key_last($cache->ttls)]);
     }
 
+    public function testProtocolRegistryReadsModernPublicConstants(): void
+    {
+        \MagIRC\Services\Ircd\ProtocolRegistry::select('unreal32');
+
+        self::assertSame('unreal32', \MagIRC\Services\Ircd\ProtocolRegistry::constant('ircd'));
+        self::assertSame(
+            'cfijklmnprstuzACGKLMNOQRSTV',
+            \MagIRC\Services\Ircd\ProtocolRegistry::constant('chan_modes')
+        );
+    }
+
     public function testDenoraPieStatisticsUseTheSharedTimeBasedCache(): void
     {
-        require_once dirname(__DIR__) . '/lib/magirc/ircds/unreal32.inc.php';
+        \MagIRC\Services\Ircd\ProtocolRegistry::select('unreal32');
         if (!defined('TBL_USER')) {
             define('TBL_USER', 'denora_user');
         }
@@ -344,8 +418,8 @@ final class ModernizationTest extends TestCase
                 };
             }
         };
-        $service = (new \ReflectionClass(\Denora::class))->newInstanceWithoutConstructor();
-        $reflection = new \ReflectionClass(\Denora::class);
+        $service = (new \ReflectionClass(\MagIRC\Services\Denora\DenoraService::class))->newInstanceWithoutConstructor();
+        $reflection = new \ReflectionClass(\MagIRC\Services\Denora\DenoraService::class);
         $reflection->getProperty('db')->setValue($service, $database);
         $reflection->getProperty('cfg')->setValue($service, (object) ['hide_ulined' => false]);
         $reflection->getProperty('statisticsCache')->setValue(
@@ -373,14 +447,14 @@ final class ModernizationTest extends TestCase
 
     public function testIrcTextCannotBreakGeneratedLinkAttributes(): void
     {
-        $rendered = \Magirc::irc2html("https://example.test/' onmouseover='alert(1)");
+        $rendered = \MagIRC\Bootstrap\Application::irc2html("https://example.test/' onmouseover='alert(1)");
         self::assertStringNotContainsString('class="topic" onmouseover=', $rendered);
         self::assertStringContainsString('href="https://example.test/&#039;"', $rendered);
     }
 
     public function testAdminWelcomeSaveSanitizesExistingContentBeforePersistence(): void
     {
-        $admin = (new \ReflectionClass(\Admin::class))->newInstanceWithoutConstructor();
+        $admin = (new \ReflectionClass(\MagIRC\Admin\Admin::class))->newInstanceWithoutConstructor();
         $database = new class {
             public array $update = [];
 
@@ -402,7 +476,7 @@ final class ModernizationTest extends TestCase
 
     public function testPublicWelcomeContentIsSanitizedBeforeRendering(): void
     {
-        $magirc = (new \ReflectionClass(\Magirc::class))->newInstanceWithoutConstructor();
+        $magirc = (new \ReflectionClass(Application::class))->newInstanceWithoutConstructor();
         $database = new class {
             public function prepare(string $query): object
             {
@@ -433,8 +507,8 @@ final class ModernizationTest extends TestCase
         $container = new Container();
         AppFactory::setContainer($container);
         $app = AppFactory::create();
-        $container->set(Twig::class, Twig::create(dirname(__DIR__) . '/theme/default/tpl', ['cache' => false]));
-        $magirc = (new \ReflectionClass(\Magirc::class))->newInstanceWithoutConstructor();
+        $container->set(Twig::class, Twig::create(dirname(__DIR__) . '/themes/default/templates', ['cache' => false]));
+        $magirc = (new \ReflectionClass(Application::class))->newInstanceWithoutConstructor();
         $magirc->cfg = (object) ['theme' => 'default', 'config' => []];
         $magirc->service = new class {
             public function checkChannel(string $channel): int
@@ -447,6 +521,7 @@ final class ModernizationTest extends TestCase
                 return true;
             }
         };
+        (new \ReflectionProperty(Application::class, 'paths'))->setValue($magirc, new ApplicationPaths(dirname(__DIR__)));
         WebRoutes::register($app, $magirc);
         $app->addRoutingMiddleware();
 
@@ -456,7 +531,7 @@ final class ModernizationTest extends TestCase
 
     public function testAdminConfigUpdatesRejectUnknownDatabaseIdentifiers(): void
     {
-        $admin = (new \ReflectionClass(\Admin::class))->newInstanceWithoutConstructor();
+        $admin = (new \ReflectionClass(\MagIRC\Admin\Admin::class))->newInstanceWithoutConstructor();
         $config = (object) ['config' => ['theme' => 'default']];
         $admin->cfg = $config;
         $database = new class {
@@ -477,18 +552,18 @@ final class ModernizationTest extends TestCase
 
     public function testApplicationConfigurationCannotInjectUrlsOrJavaScript(): void
     {
-        self::assertSame('', \Config::normalizeValue('service_webchat', 'javascript:alert(1)'));
-        self::assertSame('', \Config::normalizeValue('service_webchat', 'https://chat.example.test/\" onmouseover=alert(1)'));
-        self::assertSame('https://chat.example.test/?chan=', \Config::normalizeValue('service_webchat', 'https://chat.example.test/?chan='));
-        self::assertSame('', \Config::normalizeValue('base_url', 'data:text/html,<script>alert(1)</script>'));
-        self::assertSame('15', \Config::normalizeValue('live_interval', '15'));
-        self::assertSame('0', \Config::normalizeValue('live_interval', '15;alert(1)'));
+        self::assertSame('', \MagIRC\Config\Configuration::normalizeValue('service_webchat', 'javascript:alert(1)'));
+        self::assertSame('', \MagIRC\Config\Configuration::normalizeValue('service_webchat', 'https://chat.example.test/\" onmouseover=alert(1)'));
+        self::assertSame('https://chat.example.test/?chan=', \MagIRC\Config\Configuration::normalizeValue('service_webchat', 'https://chat.example.test/?chan='));
+        self::assertSame('', \MagIRC\Config\Configuration::normalizeValue('base_url', 'data:text/html,<script>alert(1)</script>'));
+        self::assertSame('15', \MagIRC\Config\Configuration::normalizeValue('live_interval', '15'));
+        self::assertSame('0', \MagIRC\Config\Configuration::normalizeValue('live_interval', '15;alert(1)'));
     }
 
     public function testSetupTemplatesEscapeLegacyConfigurationValues(): void
     {
         $_GET['step'] = '1';
-        $setup = new \Setup();
+        $setup = new \MagIRC\Installation\Installer();
         $html = $setup->tpl->render('step2.twig', [
             'status' => ['error' => 'new'],
             'db_magirc' => [
@@ -516,13 +591,13 @@ final class ModernizationTest extends TestCase
 
     public function testBrowserRenderingEscapesNetworkValuesUsedInHtml(): void
     {
-        $runtime = (string) file_get_contents(dirname(__DIR__) . '/js/magirc.js');
+        $runtime = (string) file_get_contents(dirname(__DIR__) . '/httpdocs/assets/js/magirc.js');
         self::assertStringContainsString(".replace(/\"/g, '&quot;')", $runtime);
         self::assertStringContainsString("escapeTags(this.point.name)", $runtime);
         foreach (
             [
-                dirname(__DIR__) . '/theme/default/js/theme.js',
-                dirname(__DIR__) . '/theme/modern-mature/js/theme.js',
+                dirname(__DIR__) . '/httpdocs/assets/themes/default/js/theme.js',
+                dirname(__DIR__) . '/httpdocs/assets/themes/modern-mature/js/theme.js',
             ] as $themeRuntime
         ) {
             $source = (string) file_get_contents($themeRuntime);
@@ -531,19 +606,19 @@ final class ModernizationTest extends TestCase
         }
         foreach (
             [
-                dirname(__DIR__) . '/theme/default/tpl/network_clients.twig',
-                dirname(__DIR__) . '/theme/default/tpl/server_clients.twig',
-                dirname(__DIR__) . '/theme/default/tpl/channel_clients.twig',
+                dirname(__DIR__) . '/themes/default/templates/network_clients.twig',
+                dirname(__DIR__) . '/themes/default/templates/server_clients.twig',
+                dirname(__DIR__) . '/themes/default/templates/channel_clients.twig',
             ] as $chartTemplate
         ) {
             self::assertStringContainsString('escapeTags(client.substring', (string) file_get_contents($chartTemplate), $chartTemplate);
         }
         foreach (
             [
-                dirname(__DIR__) . '/theme/default/tpl/server_list.twig',
-                dirname(__DIR__) . '/theme/modern-mature/tpl/server_list.twig',
-                dirname(__DIR__) . '/theme/default/tpl/user_info.twig',
-                dirname(__DIR__) . '/theme/modern-mature/tpl/user_info.twig',
+                dirname(__DIR__) . '/themes/default/templates/server_list.twig',
+                dirname(__DIR__) . '/themes/modern-mature/templates/server_list.twig',
+                dirname(__DIR__) . '/themes/default/templates/user_info.twig',
+                dirname(__DIR__) . '/themes/modern-mature/templates/user_info.twig',
             ] as $template
         ) {
             self::assertStringContainsString('escapeTags', (string) file_get_contents($template), $template);
@@ -552,9 +627,11 @@ final class ModernizationTest extends TestCase
 
     public function testSetupUsesTheModernDatabaseFactory(): void
     {
-        self::assertStringNotContainsString('Magirc_DB::', (string) file_get_contents(dirname(__DIR__) . '/setup/index.php'));
-        self::assertStringNotContainsString('Magirc_DB::', (string) file_get_contents(dirname(__DIR__) . '/setup/inc/step2.php'));
-        self::assertStringContainsString('MagircDB::getInstance()', (string) file_get_contents(dirname(__DIR__) . '/setup/index.php'));
+        $entry = (string) file_get_contents(dirname(__DIR__) . '/httpdocs/setup/index.php');
+        $routes = (string) file_get_contents(dirname(__DIR__) . '/src/MagIRC/Installation/SetupRoutes.php');
+        self::assertStringContainsString('new Installer($paths)', $entry);
+        self::assertStringContainsString('SlimApplicationFactory::create', $entry);
+        self::assertStringContainsString('MagircDatabase::getInstance()', $routes);
     }
 
     public function testPublicStatisticsSetEtagAndRespectConditionalRequest(): void
@@ -631,8 +708,8 @@ final class ModernizationTest extends TestCase
 
     public function testRestEntryPointReadsExistingSessionBeforePublicCache(): void
     {
-        $source = (string) file_get_contents(dirname(__DIR__) . '/rest/service.php');
+        $source = (string) file_get_contents(dirname(__DIR__) . '/httpdocs/rest/service.php');
         self::assertStringContainsString("isset(\$_COOKIE[session_name()])", $source);
-        self::assertStringContainsString('MagircSecurity::startSession()', $source);
+        self::assertStringContainsString('Security::startSession()', $source);
     }
 }

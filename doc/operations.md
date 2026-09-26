@@ -2,17 +2,16 @@
 
 ## Verzeichnisstruktur
 
-Der Webserver zeigt auf das MagIRC-Verzeichnis. Öffentlich benötigt werden
-`index.php`, `rest/`, `theme/*/css`, `theme/*/js`, `theme/*/img`,
-`assets/vendor/` und `admin/js/welcome-editor.bundle.js`. `vendor/` enthält
-PHP-Abhängigkeiten und wird nur serverseitig eingebunden.
+Der einzige öffentliche DocumentRoot ist `httpdocs/`. Er enthält die vier
+HTTP-Einstiegspunkte für Statistikseiten, Administration, REST und Setup sowie
+Browser-Assets unter `httpdocs/assets/`. Stelle Apache/Nginx auf genau dieses
+Verzeichnis ein; die Beispielkonfigurationen verwenden denselben Root.
 
-`conf/` enthält Datenbankzugänge und Marker, `tmp/` enthält Twig-Cache,
-Statistikcache und Logs. Beide Verzeichnisse müssen für den PHP-FPM/Apache-
-Benutzer schreibbar sein (empfohlen `0700`) und dürfen nicht als Webressource
-ausgeliefert werden. Die mitgelieferten `.htaccess`-Dateien und die Beispiel-
-VirtualHosts sperren diese Pfade; bei Nginx muss die Sperre aus dem Beispiel
-übernommen werden.
+`src/MagIRC/`, `vendor/`, `conf/`, `tmp/`, `locale/`, `resources/`, `templates/`
+und `themes/` bleiben privat. `conf/` enthält Datenbankzugänge und
+Installationsmarker, `tmp/` enthält Twig- und Statistikcache sowie Logs. Beide
+Verzeichnisse müssen für den PHP-FPM/Apache-Benutzer schreibbar sein
+(empfohlen `0700`).
 
 ## Erstinstallation
 
@@ -29,7 +28,7 @@ VirtualHosts sperren diese Pfade; bei Nginx muss die Sperre aus dem Beispiel
    ```
 
    `yarn build:runtime` kopiert nur die im Browser benötigten Bibliotheken
-   nach `assets/vendor/`. Node.js, Yarn und die Entwicklungsquellen werden im
+   nach `httpdocs/assets/vendor/`. Node.js, Yarn und die Entwicklungsquellen werden im
    laufenden Betrieb nicht benötigt.
 3. `conf/` und `tmp/` anlegen und dem PHP-Benutzer Schreibrechte geben.
 4. `/setup/` aufrufen. Der Installer prüft die Datenbank, legt das MagIRC-
@@ -45,20 +44,26 @@ Benutzer benötigen nur die für das jeweilige Schema erforderlichen Rechte.
 ## Update vorhandener Installationen
 
 1. Wartungsfenster ankündigen und `conf/`, `tmp/` sowie die MagIRC-Datenbank
-   sichern. Die Anope-/Denora-Datenbanken werden nicht vom MagIRC-Installer
-   verändert.
-2. Neue Dateien bereitstellen, ohne `conf/*.json`, `conf/*.cfg.php`,
-   `conf/.installed` oder eigene Themes zu überschreiben.
-3. `composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader`
+   sichern. Eigene Theme-Dateien ebenfalls sichern. Die Anope-/Denora-
+   Datenbanken werden nicht vom MagIRC-Installer verändert.
+2. Den vollständigen neuen Projektbaum bereitstellen. Stelle den Webserver-
+   DocumentRoot von der bisherigen Projektwurzel auf `httpdocs/` um; alte
+   Root-Einstiegspunkte wie `index.php` und Verzeichnisse wie `admin/` oder
+   `setup/` gibt es nicht mehr. Die öffentlichen URLs `/`, `/admin/`,
+   `/rest/service.php` und `/setup/` bleiben unter dem neuen Webroot bestehen.
+3. `conf/*.json`, `conf/*.cfg.php`, `conf/.installed` und `tmp/` erhalten.
+   Eigene Theme-Templates kommen nach `themes/<name>/templates/`; zugehörige
+   Browser-Assets kommen nach `httpdocs/assets/themes/<name>/`.
+4. `composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader`
    und anschließend `yarn install --frozen-lockfile --production=false`,
    `yarn build:editor` und `yarn build:runtime` ausführen.
-4. `/setup/?step=2` einmal aufrufen. Der Installer erkennt das vorhandene
+5. `/setup/?step=2` einmal aufrufen. Der Installer erkennt das vorhandene
    Schema und führt die versionierten Migrationen bis `DB_VERSION` aus.
    Vorhandene Begrüßungstexte, Administratoren, Themes und Katalogdateien
    bleiben erhalten. Alte `*.cfg.php`-Konfigurationen werden nur als Daten
    gelesen; PHP-Code darin wird nicht ausgeführt.
-5. Nach der Prüfung `tmp/`-Caches leeren und `node_modules/` aus dem Webroot
-   entfernen. `/setup/` ist bei gesetztem `.installed` nicht erreichbar.
+6. Nach der Prüfung `tmp/`-Caches leeren. `node_modules/` und `vendor/` liegen
+   außerhalb des Document-Roots. `/setup/` ist bei gesetztem `.installed` nicht erreichbar.
 
 Wenn ein Update mit einer unvollständigen Datenbankverbindung abbricht, bleibt
 die Administration gesperrt. Die Ursache steht ohne Zugangsdaten in

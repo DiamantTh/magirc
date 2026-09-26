@@ -2,29 +2,28 @@
 server {
     listen 443 ssl;
     server_name magirc.example.test;
-    root /srv/www/magirc;
+    root /srv/www/magirc/httpdocs;
     index index.php;
 
     access_log /var/log/nginx/magirc.access.log;
     error_log /var/log/nginx/magirc.error.log warn;
 
-    # Do not expose source, configuration, dependencies, caches or tests.
-    location ~* ^/(?:conf|lib|src|doc|locale|tmp|vendor|node_modules|tests|\.git)(?:/|$) { deny all; }
-    location ~* ^/(?:setup/(?:inc|lib|sql|tools|tpl)|admin/(?:lib|tpl)|theme/[^/]+/(?:tpl|slim))(?:/|$) { deny all; }
-    location ~* ^/(?:composer\.(?:json|lock)|package\.json|yarn\.lock|README\.md|SECURITY\.md|LICENSE|phpunit\.xml|phpcs\.xml|rector\.php|phpstan\.neon|_config\.yml)(?:/|$) { deny all; }
     location ~ /\. { deny all; }
+
+    # Pass only the intended public entry points to PHP-FPM.
+    location ~ ^(?<script>/(?:index|admin/index|rest/service|setup/index)\.php)(?<pathinfo>/.*)?$ {
+        try_files $script =404;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$script;
+        fastcgi_param SCRIPT_NAME $script;
+        fastcgi_param DOCUMENT_ROOT $document_root;
+        fastcgi_param PATH_INFO $pathinfo;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+    }
+
+    location ~* \.php(?:/|$) { deny all; }
 
     location / {
         try_files $uri $uri/ /index.php?$query_string;
-    }
-
-    # Only existing PHP entry points are passed to PHP-FPM.
-    location ~ ^(.+\.php)(/.*)?$ {
-        try_files $1 =404;
-        include fastcgi_params;
-        fastcgi_param SCRIPT_FILENAME $document_root$1;
-        fastcgi_param DOCUMENT_ROOT $document_root;
-        fastcgi_param PATH_INFO $2;
-        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
     }
 }

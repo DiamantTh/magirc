@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>MagIRC :: Setup</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta name="ROBOTS" content="NOINDEX, NOFOLLOW" />
+<meta name="csrf-token" content="{{ csrf_token }}" />
+<link rel="icon" href="../assets/themes/default/img/favicon.ico" type="image/x-icon">
+<link href="../assets/admin/css/styles.css" rel="stylesheet" type="text/css" />
+<link href="../assets/admin/css/font.css" rel="stylesheet" type="text/css" />
+<link href="../assets/vendor/jquery-ui/jquery-ui.min.css" rel="stylesheet" type="text/css" />
+<style type="text/css">
+div#header { width:580px; }
+div#main { width:600px; min-height:400px; }
+div#footer { width:590px; }
+pre { white-space:normal; }
+</style>
+</head>
+<body>
+{% block body %}
+<div id="header">
+    <a href="./"><img src="../assets/admin/img/magirc.png" alt="MagIRC" title="" id="logo" /></a>
+    <div id="loading"><img src="../assets/admin/img/loading.gif" alt="loading..." /></div>
+</div>
+<div id="main">
+    <div id="content">
+        <h1>Welcome to the MagIRC Setup</h1>
+        <p>Please follow the on-screen instructions to install MagIRC</p>
+        {% block content %}[content placeholder]{% endblock %}
+    </div>
+</div>
+<div id="footer">powered by <a href="https://h9k.github.io/magirc/">MagIRC</a></div>
+{% endblock %}
+{% block js %}
+<script type="text/javascript" src="../assets/vendor/jquery/jquery.min.js"></script>
+<script type="text/javascript" src="../assets/vendor/jquery-ui/jquery-ui.min.js"></script>
+<script type="text/javascript" src="../assets/vendor/jquery-form/jquery.form.js"></script>
+<script type="text/javascript">
+$(document).ready(function() {
+    $.ajaxSetup({ beforeSend: function(xhr) {
+        xhr.setRequestHeader('X-MagIRC-CSRF', $('meta[name="csrf-token"]').attr('content'));
+    }});
+    $("#loading").ajaxStart(function(){
+        $(this).show();
+    }).ajaxStop(function(){
+        $(this).hide();
+    });
+    $("button").button();
+    $(".next").click(function() { window.location = '?step=' + {{ step + 1 }}; });
+});
+</script>
+{% endblock %}
+</body>
+</html>

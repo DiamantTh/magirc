@@ -1,0 +1,20 @@
+Options -Indexes +FollowSymLinks
+DirectoryIndex index.php
+AcceptPathInfo On
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Only the four intentional PHP entry points are executable.
+    RewriteCond %{REQUEST_URI} !^/(?:index\.php|admin/index\.php|rest/service\.php|setup/index\.php)(?:/|$) [NC]
+    RewriteRule \.php(?:/|$) - [F,L,NC]
+
+    # Keep dotfiles and repository metadata private.
+    RewriteRule (^|/)\. - [F,L]
+
+    # Existing PHP path-info routes must keep their original entry point.
+    RewriteCond %{REQUEST_URI} !\.php(?:/|$) [NC]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>

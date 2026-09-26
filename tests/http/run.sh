@@ -21,12 +21,12 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-for path in admin assets index.php js lib locale rest setup src theme vendor; do
+for path in httpdocs src themes templates resources locale vendor; do
     cp -a "$root/$path" "$app/$path"
 done
 
 port=$(php -r '$socket = stream_socket_server("tcp://127.0.0.1:0", $error, $message); if (!$socket) { exit(1); } echo substr(strrchr(stream_socket_get_name($socket, false), ":"), 1); fclose($socket);')
-php -S "127.0.0.1:$port" -t "$app" > "$work/server.log" 2>&1 &
+MAGIRC_TEST_HTTPDOCS="$app/httpdocs" php -S "127.0.0.1:$port" -t "$app/httpdocs" "$test_dir/router.php" > "$work/server.log" 2>&1 &
 server_pid=$!
 
 ready=0

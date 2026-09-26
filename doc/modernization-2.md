@@ -10,9 +10,16 @@
 * PDO verwendet Exceptions, native Prepared Statements, utf8mb4 und nicht persistente Verbindungen. Anope und Denora behalten ihre getrennten Tabellenkonfigurationen.
 * Rector, PHPStan, PHPUnit und PHPCS sind eingerichtet. Die PHPUnit-Suite prüft Routing, JSON-REST-Antworten, Twig/Markdown, Locale-Fallback, PDO und beide Statistikdienste; die Sicherheitsregressionen laufen weiterhin separat.
 
+## Architekturstand
+
+Die spätere Strukturmigration hat inzwischen auch die historischen globalen
+Klassen übernommen: Anwendungscode liegt unter `src/MagIRC/`, die PSR-4-Konfiguration
+enthält keine Legacy-Classmap mehr, und `httpdocs/` ist der einzige Webroot.
+Templates bleiben privat; ausgelieferte Assets befinden sich unter
+`httpdocs/assets/`.
+
 ## Bekannte Restarbeiten
 
-* Die historischen globalen Domainklassen unter `lib/magirc` werden für bestehende Installationen weiterhin über Composer-Classmap geladen. Neue HTTP-/Infrastrukturklassen sind PSR-4; eine vollständige Namespace-Migration der Anope-/Denora-Objekte ist wegen der unterschiedlichen Legacy-Klassen und Tabellenverträge als eigener Schritt offen.
 * Dieses Umbauziel implementiert noch kein gemeinsames PSR-16/PSR-6-Statistikcache und keine öffentliche HTTP-Cache-Schicht. Das bleibt für einen separaten Schritt, damit administrative und zugriffsbeschränkte Antworten nicht versehentlich gecacht werden.
 * Im synchronisierten Upstream sind keine PO-/MO-Dateien getrackt. Die native Gettext-Integration nutzt weiterhin `locale/<locale>/LC_MESSAGES/messages.{po,mo}`; bis Kataloge bereitgestellt werden, fällt sie auf den englischen Msgid zurück.
 * Im Arbeitscontainer steht nur PHP 8.5 zur Verfügung. PHP 8.4 wurde über Composer als Plattformziel aufgelöst, konnte aber nicht separat ausgeführt werden.
