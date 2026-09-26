@@ -67,6 +67,7 @@ do
     fi
 done
 
+rm -rf -- "$stage/node_modules"
 if [ -d "$stage/vendor/phpunit" ] || [ -d "$stage/node_modules" ]; then
     echo 'Release package unexpectedly contains development dependencies.' >&2
     exit 1
@@ -76,7 +77,6 @@ if find "$stage/httpdocs/assets" -type f -name '*.php' -print -quit | grep -q .;
     exit 1
 fi
 
-rm -rf -- "$stage/node_modules"
 tar --sort=name --mtime="$source_date" --owner=0 --group=0 --numeric-owner -cf - -C "$work" "$archive_stem" \
     | gzip -n > "$archive"
 (cd "$output_dir" && sha256sum "$archive_stem.tar.gz" > "$archive_stem.tar.gz.sha256")
