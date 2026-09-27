@@ -33,21 +33,22 @@ class Admin
         ]);
         $this->tpl->addExtension(new \MagIRC\Twig\MarkdownExtension());
         $this->tpl->addExtension(new \MagIRC\Twig\TranslationExtension());
-        $errorHandler = function ($request, $exception, $displayErrorDetails, $logErrors, $logErrorDetails) use ($logger) {
+        $admin = $this;
+        $errorHandler = function ($request, $exception, $displayErrorDetails, $logErrors, $logErrorDetails, $app) use ($logger, $admin) {
             $logger->error('MagIRC admin request failed.', ['exception_class' => $exception::class]);
             $status = $exception instanceof \Slim\Exception\HttpNotFoundException ? 404 : ($exception instanceof \Slim\Exception\HttpMethodNotAllowedException ? 405 : 500);
-            $response = $this->slim->getResponseFactory()->createResponse($status);
+            $response = $app->getResponseFactory()->createResponse($status);
             try {
                 if ($status === 404 || $status === 405) {
-                    return $this->tpl->render($response, 'error.twig', [
-                        'cfg' => $this->cfg->config,
-                        'locales' => $this->getLocalesSelect(),
+                    return $admin->tpl->render($response, 'error.twig', [
+                        'cfg' => $admin->cfg->config,
+                        'locales' => $admin->getLocalesSelect(),
                         'err_code' => $status,
                     ]);
                 }
-                return $this->tpl->render($response, 'error_fatal.twig', [
-                    'cfg' => $this->cfg->config,
-                    'locales' => $this->getLocalesSelect(),
+                return $admin->tpl->render($response, 'error_fatal.twig', [
+                    'cfg' => $admin->cfg->config,
+                    'locales' => $admin->getLocalesSelect(),
                     'err_msg' => 'An internal error occurred.',
                     'err_extra' => '',
                     'server' => [],

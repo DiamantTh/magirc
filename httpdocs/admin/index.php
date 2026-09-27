@@ -45,5 +45,7 @@ try {
     if (!headers_sent()) {
         http_response_code(503);
     }
-    echo 'Service temporarily unavailable.';
+    echo $exception instanceof RuntimeException && $exception->getMessage() === 'MagIRC is not configured.'
+        ? 'MagIRC is not configured.'
+        : 'Service temporarily unavailable.';
 }

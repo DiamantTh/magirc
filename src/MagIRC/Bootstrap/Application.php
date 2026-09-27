@@ -67,14 +67,15 @@ class Application
             $view->addExtension(new \MagIRC\Twig\TranslationExtension());
         }
 
-        $errorHandler = function ($request, $exception, $displayErrorDetails, $logErrors, $logErrorDetails) use ($useTemplateEngine, $logger) {
+        $magirc = $this;
+        $errorHandler = function ($request, $exception, $displayErrorDetails, $logErrors, $logErrorDetails, $app) use ($useTemplateEngine, $logger, $magirc) {
             if ($logErrors) {
                 $logger->error('MagIRC request failed.', ['exception_class' => $exception::class]);
             }
             $notFound = $exception instanceof \Slim\Exception\HttpNotFoundException;
             $notAllowed = $exception instanceof \Slim\Exception\HttpMethodNotAllowedException;
             $status = $notFound ? 404 : ($notAllowed ? 405 : 500);
-            $response = $this->slim->getResponseFactory()->createResponse($status);
+            $response = $app->getResponseFactory()->createResponse($status);
 
             if (!$useTemplateEngine) {
                 $message = $status === 404 ? 'HTTP 404 Not Found' : ($status === 405 ? 'HTTP 405 Not Allowed' : 'HTTP 500 Internal Server Error');
@@ -83,20 +84,20 @@ class Application
             }
 
             try {
-                $view = $this->slim->getContainer()->get(\Slim\Views\Twig::class);
+                $view = $app->getContainer()->get(\Slim\Views\Twig::class);
                 if ($status !== 500) {
                     return $view->render($response, 'error.twig', [
                         'err_code' => $status,
-                        'cfg' => $this->cfg->config,
-                        'locales' => $this->getLocalesSelect(),
+                        'cfg' => $magirc->cfg->config,
+                        'locales' => $magirc->getLocalesSelect(),
                     ]);
                 }
                 return $view->render($response, 'error_fatal.twig', [
                     'err_msg' => 'An internal error occurred.',
                     'err_extra' => '',
                     'server' => [],
-                    'cfg' => $this->cfg->config,
-                    'locales' => $this->getLocalesSelect(),
+                    'cfg' => $magirc->cfg->config,
+                    'locales' => $magirc->getLocalesSelect(),
                 ]);
             } catch (Throwable $renderException) {
                 $logger->error('MagIRC error template failed.', ['exception_class' => $renderException::class]);

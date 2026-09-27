@@ -98,6 +98,8 @@ try {
     check(str_contains(headerValue($hidden, 'Cache-Control'), 'no-store'), 'Protected channel response is cacheable.');
     $missing = request('/rest/service.php/does-not-exist');
     check($missing['status'] === 404, 'Unknown REST route returned ' . $missing['status'] . ': ' . $missing['body']);
+    $missingWeb = request('/index.php/does-not-exist');
+    check($missingWeb['status'] === 404, 'Unknown web route returned ' . $missingWeb['status']);
 
     $cookies = [];
     $admin = request('/admin/index.php/overview');
@@ -119,6 +121,8 @@ try {
     check($cookies !== $oldCookies, 'Login did not renew the session cookie.');
     $overview = request('/admin/index.php/overview');
     check($overview['status'] === 200 && str_contains($overview['body'], 'Logout'), 'Authenticated overview did not render.');
+    $missingAdmin = request('/admin/index.php/does-not-exist');
+    check($missingAdmin['status'] === 404, 'Unknown authenticated admin route returned ' . $missingAdmin['status']);
     $welcome = request('/admin/index.php/configuration/welcome');
     check($welcome['status'] === 200, 'Authenticated welcome configuration is unavailable.');
     check(str_contains(headerValue($welcome, 'Cache-Control'), 'no-store'), 'Protected admin response is cacheable.');

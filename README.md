@@ -84,8 +84,8 @@ The public and REST routes are registered in `src/MagIRC/Routes`. Existing insta
 For a complete installation/update runbook, including database privileges, permissions, backups and troubleshooting, see [doc/operations.md](doc/operations.md). Apache and Nginx examples are in [doc/apache-vhost.conf.example](doc/apache-vhost.conf.example) and [doc/nginx.conf.example](doc/nginx.conf.example).
 Release packaging and the runtime/build-host split are described in [doc/release.md](doc/release.md).
 
-### Using a release package ###
-1. A release maintainer creates the complete archive on a build machine with `composer release:package`; details are in [doc/release.md](doc/release.md). Ordinary GitHub source archives do not include generated runtime assets.
+### Using an assembled deployment package ###
+1. A maintainer can create a version-neutral deployment snapshot for QA or deployment tests on a build machine with `composer release:package`; details are in [doc/release.md](doc/release.md). This command does not publish a release or select a product version. Ordinary GitHub source archives do not include generated runtime assets.
 2. Verify the `.sha256` file, then extract the archive outside the webroot. It includes production Composer dependencies and built frontend assets, so the target server does not need Composer, Node.js, Yarn or Docker.
 3. Point Apache or Nginx at the package's `httpdocs/`, set the documented `conf/` and `tmp/` permissions, and open `/setup/`.
 

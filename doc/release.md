@@ -1,9 +1,9 @@
-# Build und Bereitstellung eines Releasepakets
+# Build und Bereitstellung eines Deployment-Snapshots
 
 Ein GitHub-Quellarchiv ist kein fertiges Laufzeitpaket: die aus `node_modules/`
 gebauten Browserbibliotheken unter `httpdocs/assets/vendor/` sind absichtlich
-nicht im Git enthalten. Für Installationen ohne Node.js, Yarn oder Composer auf
-dem Zielserver wird auf einem Build-Rechner ein vollständiges Paket erstellt:
+nicht im Git enthalten. Für QA und Deploymenttests kann auf einem Build-Rechner
+ein vollständiger, versionsneutral benannter Snapshot erstellt werden:
 
 ```sh
 composer release:package
@@ -16,10 +16,21 @@ Quelländerungen müssen committed sein. Der Build installiert nur die
 produktiven Composer-Abhängigkeiten, erzeugt Editor- und Runtime-Assets,
 prüft deren Vorhandensein und entfernt anschließend `node_modules/`.
 
-Das Archiv `dist/magirc-<version>-<commit>.tar.gz` enthält `vendor/`, den
+Das Archiv `dist/magirc-snapshot-<commit>.tar.gz` enthält `vendor/`, den
 Editor-Bundle und alle Browserbibliotheken. Eine `.sha256`-Datei liegt daneben.
 Die Dateien unter `dist/` sind ignorierte Build-Ausgaben und werden nicht
-committed. Es wird nichts veröffentlicht oder hochgeladen.
+committed. Der Snapshot-Dateiname übernimmt bewusst keine Produktversion aus
+`package.json` und veröffentlicht oder lädt nichts hoch.
+
+`v1.7.1` ist der historische Produktversions-Tag vom 8. Mai 2021; die
+Architekturmodernisierung erhält diese vorhandenen Werte in
+`src/MagIRC/Version.php` und `package.json`, setzt damit aber keine neue
+Veröffentlichung fest. Die neue Struktur ändert den Deploymentvertrag:
+`httpdocs/` muss DocumentRoot sein und bestehende Installationen benötigen die
+beschriebene Pfadumstellung. Die öffentlichen URLs und das Lesen alter
+`conf/*.cfg.php`-Dateien bleiben erhalten. Die nächste Produktversion und ihre
+SemVer-Einstufung müssen separat anhand dieser Kompatibilitätsgrenzen beschlossen
+werden.
 
 Auf dem Zielserver:
 

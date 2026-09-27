@@ -21,11 +21,10 @@ esac
 mkdir -p "$output_dir"
 output_dir=$(CDPATH= cd -- "$output_dir" && pwd -P)
 
-version=$(php -r '$package = json_decode(file_get_contents("package.json"), true, 512, JSON_THROW_ON_ERROR); echo $package["version"];')
 ref=$(git rev-parse --verify HEAD)
 commit=$(git rev-parse --short=12 "$ref")
 source_date=$(git show -s --format=%cI "$ref")
-archive_stem="magirc-$version-$commit"
+archive_stem="magirc-snapshot-$commit"
 work=$(mktemp -d "${TMPDIR:-/tmp}/magirc-release.XXXXXX")
 stage="$work/$archive_stem"
 archive="$output_dir/$archive_stem.tar.gz"
@@ -81,5 +80,5 @@ tar --sort=name --mtime="$source_date" --owner=0 --group=0 --numeric-owner -cf -
     | gzip -n > "$archive"
 (cd "$output_dir" && sha256sum "$archive_stem.tar.gz" > "$archive_stem.tar.gz.sha256")
 
-echo "Release package: $archive"
+echo "Development snapshot package: $archive"
 echo "Checksum: $archive.sha256"
